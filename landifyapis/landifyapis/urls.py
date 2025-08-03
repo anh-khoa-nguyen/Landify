@@ -20,4 +20,6 @@ from django.urls import path, include
 urlpatterns = [
     path('', include('landifys.urls')),
     path('admin/', admin.site.urls),
+    path('o/', include('oauth2_provider.urls',
+                namespace='oauth2_provider')),
 ]

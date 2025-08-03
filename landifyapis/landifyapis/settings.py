@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'ckeditor_uploader',
     'rest_framework',
     'drf_yasg',
+    'oauth2_provider',
 ]
 
 MIDDLEWARE = [
@@ -78,6 +79,12 @@ WSGI_APPLICATION = 'landifyapis.wsgi.application'
 
 AUTH_USER_MODEL = 'landifys.User'
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+    'oauth2_provider.contrib.rest_framework.OAuth2Authentication',)
+}
+
+
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -91,6 +98,14 @@ DATABASES = {
     }
 }
 
+
+
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+#         'LOCATION': 'unique-snowflake',
+#     }
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -140,3 +155,34 @@ cloudinary.config(
     api_secret="_5G4itRP_2YE52K8srR6cJO5Las",  # Click 'View API Keys' above to copy your API secret
     secure=True
 )
+
+FPT_AI_API_KEY = 'K2Bnogt57MK9420KmYWRSqsHrZEsQ7n8' # Dán key của bạn vào đây
+
+TWILIO_ACCOUNT_SID = "AC105c77a70ce1146dc698f8dbbb158c59"
+TWILIO_AUTH_TOKEN = "b5cef4987fc5daad12284e27c2a6e252"
+TWILIO_PHONE_NUMBER = "+13187025569"
+
+
+# CLIENT_ID = nKLTa5QZouzdONh1ZJeXyKLZeqvU7SPKYr9fD9Zl
+# CLIENT_SECRET = iXRGem7qfcmffKnMipsTTeDFvmjTqrzwoudZ6vfwbPTGt2qFCEDnxoRBWfVW094QnMxZhwQcdSoYWSSNarzVbLB3xyDVxFWVqVt7LLc3N7BKn5ORoWnWhnR5e2AstNpR
+
+REDIS_PASSWORD = 'YTo268hyrHl8gUVXuoCbRQAYNEs6zuyD'
+REDIS_HOST = 'redis-12995.c91.us-east-1-3.ec2.redns.redis-cloud.com'
+REDIS_PORT = '12995'
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f'redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}', # Dùng DB số 1 cho cache để tách biệt với Celery
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+CELERY_BROKER_URL = f'redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}'
+CELERY_RESULT_BACKEND = f'redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0'
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Asia/Ho_Chi_Minh'

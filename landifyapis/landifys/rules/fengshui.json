@@ -1,0 +1,46 @@
+{
+  "direction_elements": {
+    "Đông": "Mộc",
+    "Tây": "Kim",
+    "Nam": "Hỏa",
+    "Bắc": "Thủy",
+    "Đông Bắc": "Thổ",
+    "Tây Nam": "Thổ",
+    "Đông Nam": "Mộc",
+    "Tây Bắc": "Kim"
+  },
+
+  "relationship_rules": {
+    "good": "Tương sinh (rất tốt)",
+    "neutral": "Tương hợp (tốt)",
+    "bad": "Tương khắc (xấu)"
+  },
+
+  "feng_shui_rules": {
+    "Kim": {
+      "good": ["Tây Nam", "Đông Bắc"],
+      "neutral": ["Tây", "Tây Bắc"],
+      "bad": ["Nam", "Đông", "Đông Nam"]
+    },
+    "Mộc": {
+      "good": ["Bắc"],
+      "neutral": ["Đông", "Đông Nam"],
+      "bad": ["Tây", "Tây Bắc", "Tây Nam", "Đông Bắc"]
+    },
+    "Thủy": {
+      "good": ["Tây", "Tây Bắc"],
+      "neutral": ["Bắc"],
+      "bad": ["Tây Nam", "Đông Bắc", "Nam"]
+    },
+    "Hỏa": {
+      "good": ["Đông", "Đông Nam"],
+      "neutral": ["Nam"],
+      "bad": ["Bắc", "Tây", "Tây Bắc"]
+    },
+    "Thổ": {
+      "good": ["Nam"],
+      "neutral": ["Tây Nam", "Đông Bắc"],
+      "bad": ["Đông", "Đông Nam", "Bắc"]
+    }
+  }
+}
