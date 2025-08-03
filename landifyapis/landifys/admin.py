@@ -1,4 +1,5 @@
-from landifys.models import User, Post, Category
+from landifys.models import User, Post, ListingType, Listing, Property, PropertyType, Location, District, City \
+    , Ward, Report
 from django.contrib import admin
 from django.utils.safestring import mark_safe
 from django import forms
@@ -17,5 +18,17 @@ class MyPost(admin.ModelAdmin):
 
 # Register your models here.
 admin.site.register(User)
-admin.site.register(Category)
 admin.site.register(Post, MyPost)
+admin.site.register(ListingType)
+admin.site.register(Listing)
+admin.site.register(PropertyType)
+admin.site.register(Property)
+
+# Location
+admin.site.register(City)
+admin.site.register(District)
+admin.site.register(Ward)
+admin.site.register(Location)
+
+# Report
+admin.site.register(Report)
