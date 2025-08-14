@@ -61,9 +61,47 @@ class LocationSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class PropertySerializer(serializers.ModelSerializer):
+    location = LocationSerializer()
+
+    owner = UserSerializer(read_only=True)
+    property_type = PropertyTypeSerializer(read_only=True)
+    direction = DirectionSerializer(read_only=True)
+    utilities = UtilitySerializer(many=True, read_only=True)
+
+    property_type_id = serializers.IntegerField(write_only=True)
+    direction_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    utility_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
+
     class Meta:
         model = Property
-        fields = "__all__"
+        fields = [
+            'id', 'owner', 'property_type', 'location', 'direction', 'area',
+            'has_legal_docs', 'floor_num', 'bedroom_count', 'bathroom_count',
+            'utilities', 'property_type_id', 'direction_id', 'utility_ids'
+        ]
+
+    def create(self, validated_data):
+        """
+        Ghi đè hàm create để xử lý việc tạo Location và gán utilities.
+        """
+        # 1. Tách dữ liệu của location và utilities ra khỏi dữ liệu chính.
+        location_data = validated_data.pop('location')
+        utility_ids = validated_data.pop('utility_ids', [])
+
+        # 2. Tạo đối tượng Location trước.
+        location = Location.objects.create(**location_data)
+
+        # 3. Tạo đối tượng Property với location vừa tạo và các dữ liệu còn lại.
+        # validated_data lúc này chỉ còn chứa các trường của Property.
+        prop = Property.objects.create(location=location, **validated_data)
+
+        # 4. Gán các tiện ích (utilities) cho Property.
+        if utility_ids:
+            prop.utilities.set(utility_ids)
+
+        return prop
 
 class PropertyUtilitySerializer(serializers.ModelSerializer):
     class Meta:
@@ -82,6 +120,9 @@ class ListingSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class PropertyMediaSerializer(serializers.ModelSerializer):
+    url = serializers.PrimaryKeyRelatedField(read_only=True)
+    property = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = PropertyMedia
         fields = "__all__"
@@ -125,21 +166,38 @@ class ContractSerializer(serializers.ModelSerializer):
 
 # =================== SOCIAL ==========================
 
-class PostSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    class Meta:
-        model = Post
-        fields = "__all__"
-
 class CommentSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    post = serializers.PrimaryKeyRelatedField(read_only=True)
+
+
     class Meta:
         model = Comment
         fields = "__all__"
 
 class ReactionSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = Reaction
         fields = "__all__"
+
+class PostSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    comments = CommentSerializer(many=True, read_only=True)
+    reactions = ReactionSerializer(many=True, read_only=True)
+
+    comment_count = serializers.SerializerMethodField()
+    reaction_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = "__all__"
+
+    def get_comment_count(self, obj):
+        return obj.comments.count()
+
+    def get_reaction_count(self, obj):
+        return obj.reactions.count()
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:

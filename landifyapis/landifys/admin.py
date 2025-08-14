@@ -1,5 +1,5 @@
 from landifys.models import User, Post, ListingType, Listing, Property, PropertyType, Location, District, City \
-    , Ward, Report
+    , Ward, Report, Utility
 from django.contrib import admin
 from django.utils.safestring import mark_safe
 from django import forms
@@ -32,3 +32,6 @@ admin.site.register(Location)
 
 # Report
 admin.site.register(Report)
+
+# Property
+admin.site.register(Utility)
