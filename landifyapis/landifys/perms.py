@@ -15,7 +15,7 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.user.role == 'admin':
             return True
-        return obj.resident == request.user
+        return obj.user == request.user
 
 class IsIdentityVerified(permissions.BasePermission):
     message = 'Your identity must be verified to perform this action.'

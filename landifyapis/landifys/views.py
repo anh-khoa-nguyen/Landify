@@ -32,18 +32,18 @@ from . import tasks
 from .func import fengshui
 import requests
 from datetime import datetime
-
+from cloudinary.exceptions import Error as CloudinaryError
 
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
-    queryset = User.objects.filter(is_active=True)
+    queryset = User.objects.filter()
     serializer_class = serializers.UserSerializer
     parser_classes = [parsers.MultiPartParser]
 
     # --- Basic ---
     def get_permissions(self):
-        if self.action in ['disable_account']:
+        if self.action in ['disable']:
             return [perms.IsAdminOrForbidden()]
-        elif self.action in ['current_user', 'follow', 'unfollow']:
+        elif self.action in ['current_user', 'follow']:
             return [permissions.IsAuthenticated()]
         return [permissions.AllowAny()]
 
@@ -59,45 +59,54 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     @action(methods=['patch'], url_path='disable', detail=True)
     def disable_account(self, request, pk=None):
         try:
-            user_to_disable = self.get_object()
-            user_to_disable.is_active = False
-            user_to_disable.save()
-            return Response({"message": f"User {user_to_disable.username} has been disabled."},
-                            status=status.HTTP_200_OK)
-        except models.User.DoesNotExist:
+            user_to_toggle = self.get_object()
+        except User.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if user_to_toggle == request.user:
+            return Response({"error": "Admin cannot disable their own account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_to_toggle.is_active = not user_to_toggle.is_active
+        user_to_toggle.save(update_fields=['is_active'])
+
+        new_status = "enabled" if user_to_toggle.is_active else "disabled"
+        message = f"User {user_to_toggle.username} has been {new_status}."
+
+        serializer = self.get_serializer(user_to_toggle)
+        return Response({"message": message, "data": serializer.data}, status=status.HTTP_200_OK)
 
     # --- User ---
     @action(methods=['post'], url_path='follow', detail=True)
-    def follow(self, request, pk=None):
+    def toggle_follow(self, request, pk=None):
         try:
-            user_to_follow = self.get_object()
-            if user_to_follow == request.user:
-                return Response({"error": "You cannot follow yourself."}, status=status.HTTP_400_BAD_REQUEST)
-
-            follow, created = Subscription.objects.get_or_create(follower=request.user, following=user_to_follow)
-            if created:
-                return Response({"message": f"Successfully followed {user_to_follow.username}."},
-                                status=status.HTTP_201_CREATED)
-            else:
-                return Response({"message": f"You are already following {user_to_follow.username}."},
-                                status=status.HTTP_200_OK)
+            user_to_toggle = self.get_object()
+            print(user_to_toggle)
         except User.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-    # API: unfollow()
-    @action(methods=['post'], url_path='unfollow', detail=True)
-    def unfollow(self, request, pk=None):
+        if user_to_toggle == request.user:
+            return Response({"error": "You cannot follow yourself."}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            user_to_unfollow = self.get_object()
-            deleted_count, _ = Subscription.objects.filter(follower=request.user, following=user_to_unfollow).delete()
-            if deleted_count > 0:
-                return Response({"message": f"Successfully unfollowed {user_to_unfollow.username}."},
-                                status=status.HTTP_204_NO_CONTENT)
-            else:
-                return Response({"error": "You are not following this user."}, status=status.HTTP_400_BAD_REQUEST)
-        except User.DoesNotExist:
-            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+            subscription = Subscription.objects.get(
+                follower=request.user,
+                following=user_to_toggle
+            )
+            subscription.delete()
+            return Response(
+                {"status": "unfollowed", "message": f"Successfully unfollowed {user_to_toggle.username}."},
+                status=status.HTTP_200_OK
+            )
+
+        except Subscription.DoesNotExist:
+            Subscription.objects.create(
+                follower=request.user,
+                following=user_to_toggle
+            )
+            return Response(
+                {"status": "followed", "message": f"Successfully followed {user_to_toggle.username}."},
+                status=status.HTTP_201_CREATED
+            )
 
     @action(methods=['patch'], url_path='change_avatar', detail=False)
     def change_avatar(self, request):
@@ -296,7 +305,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff or getattr(user, 'role', None) == User.Role.ADMIN:  # Giả sử có role ADMIN
+        if user.is_staff or getattr(user, 'role', None) == User.Role.ADMIN:
             return super().get_queryset()
         return Appointment.objects.filter(user=user)
 
@@ -403,8 +412,8 @@ class AuthVerificationView(viewsets.ViewSet):
             id_card_image.seek(0)
             full_image_data = id_card_image.read()
 
-            cache_key = f'ekyc_image_{user.id}'  # Đổi tên key cho rõ nghĩa hơn
-            cache.set(cache_key, full_image_data, timeout=600)  # Lưu trong 10 phút
+            cache_key = f'ekyc_image_{user.id}'
+            cache.set(cache_key, full_image_data, timeout=600)
 
             # Lưu dữ liệu đã trích xuất và cập nhật trạng thái cho user
             user.id_card_data = extracted_data
@@ -492,6 +501,77 @@ class AuthVerificationView(viewsets.ViewSet):
             print(f"Error in verify_liveness: {str(e)}")
             return Response({"error": "Đã có lỗi xảy ra trong quá trình xác thực khuôn mặt."},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# =============================================================================
+# BẤT ĐỘNG SẢN
+# =============================================================================
+class PropertyViewSet(viewsets.ModelViewSet):
+    queryset = Property.objects.select_related(
+        'owner', 'property_type', 'location', 'direction'
+    ).prefetch_related('utilities')
+
+    serializer_class = serializers.PropertySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            self.permission_classes = [permissions.AllowAny]
+
+        elif self.action == 'create':
+            self.permission_classes = [permissions.IsAuthenticated, perms.IsIdentityVerified]
+
+        elif self.action in ['update', 'partial_update', 'destroy']:
+            self.permission_classes = [permissions.IsAuthenticated, perms.IsOwnerOrAdmin]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+class MediaViewSet(viewsets.ModelViewSet):
+    queryset = PropertyMedia.objects.all()
+    serializer_class = serializers.PropertyMediaSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser]
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            self.permission_classes = [permissions.IsAuthenticated, perms.IsOwnerOrAdmin]
+        return super().get_permissions()
+
+    def get_queryset(self):
+        property_pk = self.kwargs.get('property_pk')
+        if property_pk:
+            return self.queryset.filter(property_id=property_pk)
+        return self.queryset.none()
+
+    def perform_create(self, serializer):
+        property_pk = self.kwargs.get('property_pk')
+        try:
+            prop = Property.objects.get(pk=property_pk)
+        except Property.DoesNotExist:
+            raise serializers.ValidationError("Bất động sản không tồn tại.")
+
+        media_file = self.request.FILES.get('media_file')
+        if not media_file:
+            raise serializers.ValidationError({"media_file": "Vui lòng cung cấp file phương tiện."})
+
+        try:
+            uploaded_media = cloudinary.uploader.upload(
+                media_file,
+                resource_type="auto"
+            )
+
+            media_url = uploaded_media.get('secure_url')
+            if not media_url:
+                raise serializers.ValidationError("Upload file thất bại, không nhận được URL.")
+
+        except CloudinaryError as e:
+            print(f"Cloudinary upload error: {e}")
+            raise serializers.ValidationError({"media_file": "Upload file thất bại, vui lòng thử lại."})
+        except Exception as e:
+            print(f"Unexpected error during upload: {e}")
+            raise serializers.ValidationError({"detail": "Có lỗi không mong muốn xảy ra."})
+
+        serializer.save(property=prop, url=media_url, active=True)
 
 # =============================================================================
 # 4. PHÂN TÍCH DỮ LIỆU, PHONG THỦY VÀ ĐÁNH GIÁ
@@ -598,14 +678,6 @@ class PropertyAnalysisViewSet(viewsets.ViewSet):
 
         return Response(result, status=status.HTTP_200_OK)
 
-        result = {
-            "user_menh": "Thổ", # Kết quả tính toán
-            "property_direction": prop.direction.name if prop.direction else "Không xác định",
-            "compatibility_score": 85, # Điểm từ 0-100
-            "analysis": "Gia chủ mệnh Thổ, nhà hướng Nam (thuộc Hỏa). Hỏa sinh Thổ, rất tốt, mang lại may mắn, tài lộc."
-        }
-        return Response(result, status=status.HTTP_200_OK)
-
     @action(detail=True, methods=['post'], url_path='rate',
             permission_classes=[permissions.IsAuthenticated, perms.IsIdentityVerified])
     def rate(self, request, pk=None):
@@ -684,22 +756,89 @@ class PropertyAnalysisViewSet(viewsets.ViewSet):
 
 class PostViewSet(viewsets.ModelViewSet):
     """ViewSet cho các bài đăng chia sẻ kinh nghiệm."""
-    queryset = Post.objects.all()
+    queryset = Post.objects.filter(active=True)
     serializer_class = serializers.PostSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             self.permission_classes = [permissions.AllowAny]
-        elif self.action == 'create':
+        elif self.action in ['create', 'react']: # Thêm các action mới vào đây
             self.permission_classes = [permissions.IsAuthenticated]
-        else:  # update, destroy
+        else:  # update, partial_update, destroy
             self.permission_classes = [permissions.IsAuthenticated, perms.IsOwnerOrAdmin]
         return super().get_permissions()
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user, active=True)
 
+    @action(detail=True, methods=['post'], url_path='react')
+    def react(self, request, pk=None):
+        try:
+            post = self.get_object()
+        except Post.DoesNotExist:
+            return Response({"error": "Bài đăng không tồn tại."}, status=status.HTTP_404_NOT_FOUND)
+
+        reaction_type = request.data.get('type')
+
+        if not reaction_type:
+            return Response({"error": "Vui lòng cung cấp 'type' của cảm xúc."}, status=status.HTTP_400_BAD_REQUEST)
+
+        valid_types = [t[0] for t in Reaction.Type.choices]
+        if reaction_type not in valid_types:
+            return Response({"error": f"Loại cảm xúc không hợp lệ. Chỉ chấp nhận: {valid_types}"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            existing_reaction = Reaction.objects.get(user=request.user, post=post)
+
+            if existing_reaction.type == reaction_type:
+                existing_reaction.delete()
+                return Response({"message": "Đã xóa cảm xúc."}, status=status.HTTP_204_NO_CONTENT)
+            else:
+                existing_reaction.type = reaction_type
+                existing_reaction.save()
+                serializer = serializers.ReactionSerializer(existing_reaction)
+                return Response({"message": "Đã cập nhật cảm xúc.", "data": serializer.data}, status=status.HTTP_200_OK)
+
+        except Reaction.DoesNotExist:
+            new_reaction = Reaction.objects.create(
+                user=request.user,
+                post=post,
+                type=reaction_type
+            )
+            serializer = serializers.ReactionSerializer(new_reaction)
+            return Response({"message": "Đã thêm cảm xúc.", "data": serializer.data}, status=status.HTTP_201_CREATED)
+
+class CommentViewSet(viewsets.ModelViewSet):
+    queryset = Comment.objects.all()
+    serializer_class = serializers.CommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ['update', 'partial_update', 'destroy']:
+            self.permission_classes = [permissions.IsAuthenticated, perms.IsOwnerOrAdmin]
+        return super().get_permissions()
+
+    def get_queryset(self):
+        """
+        Ghi đè để chỉ trả về các comment của một post cụ thể
+        khi truy cập qua nested route.
+        """
+        # Lấy post_pk từ URL (ví dụ: /posts/123/comments/)
+        post_pk = self.kwargs.get('post_pk')
+        if post_pk:
+            return self.queryset.filter(post_id=post_pk)
+        return self.queryset.none()
+
+    def perform_create(self, serializer):
+        post_pk = self.kwargs.get('post_pk')
+        try:
+            post = Post.objects.get(pk=post_pk)
+        except Post.DoesNotExist:
+            raise serializers.ValidationError("Bài đăng không tồn tại.")
+
+        serializer.save(user=self.request.user, post=post, active=True)
 
 class ProtestViewSet(viewsets.ModelViewSet):
     """
