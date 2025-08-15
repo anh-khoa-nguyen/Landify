@@ -25,9 +25,7 @@ admin.site.register(PropertyType)
 admin.site.register(Property)
 
 # Location
-admin.site.register(City)
-admin.site.register(District)
-admin.site.register(Ward)
+
 admin.site.register(Location)
 
 # Report
