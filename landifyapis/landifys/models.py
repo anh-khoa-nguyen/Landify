@@ -4,6 +4,7 @@ from ckeditor.fields import RichTextField
 from cloudinary.models import CloudinaryField
 from django.utils import timezone
 from django.contrib.auth.hashers import is_password_usable
+from vi_address.models import City, District, Ward
 
 #=================== BASE & USER ==========================
 
@@ -68,32 +69,22 @@ class Utility(BaseModel):
     def __str__(self):
         return self.name
 
-class City(BaseModel):
-    name = models.CharField(max_length=100, unique=True)
-    def __str__(self): return self.name
-
-class District(BaseModel):
-    city = models.ForeignKey(City, on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
-    def __str__(self): return self.name
-
-class Ward(BaseModel):
-    district = models.ForeignKey(District, on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
-    def __str__(self): return self.name
-
-
 class Location(BaseModel):
     """Lưu địa chỉ có cấu trúc của bất động sản"""
     street = models.CharField(max_length=255)
-    ward = models.ForeignKey(Ward, on_delete=models.SET_NULL, null=True)
-    district = models.ForeignKey(District, on_delete=models.SET_NULL, null=True)
-    city = models.ForeignKey(City, on_delete=models.SET_NULL, null=True)
+    ward = models.ForeignKey(Ward, on_delete=models.SET_NULL, null=True, verbose_name="Phường/Xã")
+    district = models.ForeignKey(District, on_delete=models.SET_NULL, null=True, verbose_name="Quận/Huyện")
+    city = models.ForeignKey(City, on_delete=models.SET_NULL, null=True, verbose_name="Tỉnh/Thành phố")
     lat = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
     lng = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)
 
     def __str__(self):
-        return f"{self.street}, {self.ward}, {self.district}, {self.city}"
+        full_address = f"{self.street}, {self.ward}, {self.district}, {self.city}"
+        return full_address
+
+    class Meta:
+        verbose_name = "Địa điểm"
+        verbose_name_plural = "Các Địa điểm"
 
 class Property(BaseModel):
     """

@@ -20,20 +20,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='City',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('active', models.BooleanField(default=True)),
-                ('created_date', models.DateTimeField(auto_now_add=True)),
-                ('updated_date', models.DateTimeField(auto_now=True)),
-                ('name', models.CharField(max_length=100, unique=True)),
-            ],
-            options={
-                'ordering': ['-id'],
-                'abstract': False,
-            },
-        ),
-        migrations.CreateModel(
             name='ContractType',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
@@ -152,21 +138,6 @@ class Migration(migrations.Migration):
             ],
         ),
         migrations.CreateModel(
-            name='District',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('active', models.BooleanField(default=True)),
-                ('created_date', models.DateTimeField(auto_now_add=True)),
-                ('updated_date', models.DateTimeField(auto_now=True)),
-                ('name', models.CharField(max_length=100)),
-                ('city', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='landifys.city')),
-            ],
-            options={
-                'ordering': ['-id'],
-                'abstract': False,
-            },
-        ),
-        migrations.CreateModel(
             name='Listing',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
@@ -240,8 +211,8 @@ class Migration(migrations.Migration):
                 ('street', models.CharField(max_length=255)),
                 ('lat', models.DecimalField(blank=True, decimal_places=7, max_digits=10, null=True)),
                 ('lng', models.DecimalField(blank=True, decimal_places=7, max_digits=10, null=True)),
-                ('city', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='landifys.city')),
-                ('district', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='landifys.district')),
+                ('city', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='vi_address.city')),
+                ('district', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='vi_address.district')),
             ],
             options={
                 'ordering': ['-id'],
@@ -394,25 +365,10 @@ class Migration(migrations.Migration):
             name='utilities',
             field=models.ManyToManyField(blank=True, through='landifys.PropertyUtility', to='landifys.utility'),
         ),
-        migrations.CreateModel(
-            name='Ward',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('active', models.BooleanField(default=True)),
-                ('created_date', models.DateTimeField(auto_now_add=True)),
-                ('updated_date', models.DateTimeField(auto_now=True)),
-                ('name', models.CharField(max_length=100)),
-                ('district', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='landifys.district')),
-            ],
-            options={
-                'ordering': ['-id'],
-                'abstract': False,
-            },
-        ),
         migrations.AddField(
             model_name='location',
             name='ward',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='landifys.ward'),
+            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='vi_address.ward'),
         ),
         migrations.CreateModel(
             name='Reaction',
