@@ -1,9 +1,5 @@
 from django.apps import AppConfig
 
 class LandifysConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
+    default_auto_field = 'django.db.models.BigAutoField' # Dòng này giờ vô nghĩa nhưng không gây hại
     name = 'landifys'
-
-    def ready(self):
-        # Import file signals để các decorator @receiver được đăng ký.
-        import landifys.signals

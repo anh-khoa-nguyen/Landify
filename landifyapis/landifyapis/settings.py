@@ -27,16 +27,16 @@ SECRET_KEY = 'django-insecure-y)-pl2ozn9+-=i72fog_w^91o*h73uvo$l)7u=oegl05n-5)@n
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['presumably-literate-bluejay.ngrok-free.app', '127.0.0.1']
 
 CKEDITOR_UPLOAD_PATH = "ckeditor/posts/"
 
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
+    # 'django.contrib.admin',
+    # 'django.contrib.auth',
+    # 'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'ckeditor_uploader',
     'rest_framework',
     'drf_yasg',
-    'oauth2_provider',
+    # 'oauth2_provider',
     'vi_address'
 ]
 
@@ -54,7 +54,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # 'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -78,26 +78,26 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'landifyapis.wsgi.application'
 
-AUTH_USER_MODEL = 'landifys.User'
+# AUTH_USER_MODEL = 'landifys.User'
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-    'oauth2_provider.contrib.rest_framework.OAuth2Authentication',)
+    # 'DEFAULT_AUTHENTICATION_CLASSES': (
+    # 'oauth2_provider.contrib.rest_framework.OAuth2Authentication',)
 }
 
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'landifydb',
-        'USER': 'root',
-        'PASSWORD': 'Abc@123',
-        'HOST': ''  # mặc định localhost
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': 'landifydb',
+#         'USER': 'root',
+#         'PASSWORD': 'Abc@123',
+#         'HOST': ''  # mặc định localhost
+#     }
+# }
 
 
 
@@ -157,19 +157,19 @@ cloudinary.config(
     secure=True
 )
 
-FPT_AI_API_KEY = 'K2Bnogt57MK9420KmYWRSqsHrZEsQ7n8' # Dán key của bạn vào đây
+FPT_AI_API_KEY = 'N2bVZwLePAtl2NYtXdbhOrF2mrcXDErA' # Dán key của bạn vào đây
 
-TWILIO_ACCOUNT_SID = "AC105c77a70ce1146dc698f8dbbb158c59"
-TWILIO_AUTH_TOKEN = "b5cef4987fc5daad12284e27c2a6e252"
-TWILIO_PHONE_NUMBER = "+13187025569"
+TWILIO_ACCOUNT_SID = "ACfc1999b732d99aedbd784fac10a3ab25"
+TWILIO_AUTH_TOKEN = "3cb4371fbc368fe4f89b22e1dae1dabf"
+TWILIO_PHONE_NUMBER = "+12705181861"
 
 
 # CLIENT_ID = nKLTa5QZouzdONh1ZJeXyKLZeqvU7SPKYr9fD9Zl
 # CLIENT_SECRET = iXRGem7qfcmffKnMipsTTeDFvmjTqrzwoudZ6vfwbPTGt2qFCEDnxoRBWfVW094QnMxZhwQcdSoYWSSNarzVbLB3xyDVxFWVqVt7LLc3N7BKn5ORoWnWhnR5e2AstNpR
 
-REDIS_PASSWORD = 'YTo268hyrHl8gUVXuoCbRQAYNEs6zuyD'
-REDIS_HOST = 'redis-12995.c91.us-east-1-3.ec2.redns.redis-cloud.com'
-REDIS_PORT = '12995'
+REDIS_PASSWORD = 'I5cs01sZcOMmgOZTyaktdkOj6TKAbaDd'
+REDIS_HOST = 'redis-16504.c240.us-east-1-3.ec2.redns.redis-cloud.com'
+REDIS_PORT = '16504'
 
 CACHES = {
     "default": {
@@ -187,3 +187,6 @@ CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Ho_Chi_Minh'
+
+AGORA_APP_ID = '9f816512f54b4e1aa05810663f590660'
+AGORA_APP_CERTIFICATE = 'a0ee6856de0a4e398f82dc0526fd0e7a'

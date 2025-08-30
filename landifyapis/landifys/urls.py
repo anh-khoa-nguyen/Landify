@@ -3,7 +3,8 @@ from django.urls import path, include, re_path
 from rest_framework_nested import routers
 from landifys import views
 
-r = routers.DefaultRouter()
+r = routers.SimpleRouter()
+
 r.register('users', views.UserViewSet, basename='user')
 r.register('lists', views.ListingViewSet, basename='listing')
 r.register('reports', views.ReportViewSet, basename='report')
@@ -16,11 +17,12 @@ r.register('media', views.MediaViewSet, basename='media')
 r.register('posts', views.PostViewSet, basename='post')
 r.register('comments', views.CommentViewSet, basename='comment')
 r.register('protests', views.ProtestViewSet, basename='protest')
+r.register('agora', views.AgoraTokenViewSet, basename='agora')
 
-posts_router = routers.NestedDefaultRouter(r, 'posts', lookup='post')
+posts_router = routers.NestedSimpleRouter(r, 'posts', lookup='post')
 posts_router.register('comments', views.CommentViewSet, basename='post-comments')
 
-properties_router = routers.NestedDefaultRouter(r, 'properties', lookup='property')
+properties_router = routers.NestedSimpleRouter(r, 'properties', lookup='property')
 properties_router.register('media', views.MediaViewSet, basename='property-media')
 
 urlpatterns = [

@@ -6,6 +6,29 @@ from datetime import datetime
 import random
 from django.core.cache import cache
 import requests
+import os
+
+import firebase_admin
+from firebase_admin import credentials, auth, firestore
+
+from datetime import date, datetime
+from decimal import Decimal
+
+SERVICE_ACCOUNT_KEY_PATH = os.path.join(settings.BASE_DIR, 'serviceAccountKey.json')
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH)
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+def verify_firebase_token(id_token):
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        return decoded_token
+    except Exception as e:
+        print(f"Lỗi xác thực Firebase token: {e}")
+        return None
 
 def send_sms(to_phone_number, message_body):
     """
@@ -22,6 +45,9 @@ def send_sms(to_phone_number, message_body):
         # Khởi tạo Client của Twilio
         twilio_client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
+        print(settings.TWILIO_ACCOUNT_SID)
+        print(settings.TWILIO_AUTH_TOKEN)
+
         # Gửi tin nhắn
         message = twilio_client.messages.create(
             body=message_body,
@@ -37,7 +63,7 @@ def send_sms(to_phone_number, message_body):
         return {"message": "Failed to send SMS", "error": str(e)}
 
 
-def generate_otp(length=6):
+def generate_otp(length=4):
     """Tạo một mã OTP số ngẫu nhiên."""
     return str(random.randint(10 ** (length - 1), 10 ** length - 1))
 
@@ -88,3 +114,23 @@ def call_fpt_liveness_api(video_file, id_card_image_data):
     response = requests.post(url, headers=headers, files=files)
     response.raise_for_status()
     return response.json()
+
+
+def convert_data_for_firestore(data):
+    if not isinstance(data, dict):
+        return data
+
+    clean_data = {}
+    for key, value in data.items():
+        if isinstance(value, date) and not isinstance(value, datetime):
+            clean_data[key] = datetime.combine(value, datetime.min.time())
+        elif isinstance(value, Decimal):
+            clean_data[key] = float(value)
+        elif isinstance(value, dict):
+            clean_data[key] = convert_data_for_firestore(value)
+        elif isinstance(value, list):
+            clean_data[key] = [convert_data_for_firestore(item) for item in value]
+        else:
+            clean_data[key] = value
+
+    return clean_data

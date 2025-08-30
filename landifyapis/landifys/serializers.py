@@ -1,237 +1,231 @@
 from rest_framework import serializers
-from landifys.models import *
 
 
-class UserSerializer(serializers.ModelSerializer):
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        rep['item_image'] = instance.item_image.url if hasattr(instance, 'item_image') and instance.item_image else None
-        return rep
+# Không import models nữa vì không còn dùng Django ORM
+# from landifys.models import *
 
-    def create(self, validated_data):
-        data = validated_data.copy()
-        user = User(**data)
-        user.set_password(data["password"])
-        user.save()
-        return user
+# =============================================================================
+# LƯU Ý QUAN TRỌNG:
+# Khi chuyển sang Firestore, các Serializer này không còn kế thừa từ ModelSerializer.
+# Chúng kế thừa từ serializers.Serializer và vai trò chính là VALIDATE dữ liệu
+# đầu vào từ client. Logic tạo và cập nhật bản ghi trong database (Firestore)
+# sẽ được xử lý hoàn toàn trong views.py sau khi serializer.is_valid() trả về True.
+# =============================================================================
 
-    class Meta:
-        model = User
-        fields = "__all__"
-        extra_kwargs = {
-            'password': {'write_only': True}
-        }
+
+class UserSerializer(serializers.Serializer):
+    """
+    Dùng để validate dữ liệu khi tạo hoặc cập nhật hồ sơ người dùng.
+    Cũng có thể dùng để định dạng dữ liệu trả về.
+    """
+    # Các trường client có thể gửi lên để cập nhật
+    first_name = serializers.CharField(max_length=150, required=False)
+    last_name = serializers.CharField(max_length=150, required=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    date_of_birth = serializers.DateField(required=False)
+
+    uid = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(read_only=True)
+    avatar = serializers.URLField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True, default=True)
+
+    is_phone_verified = serializers.BooleanField(read_only=True)
+    is_id_card_verified = serializers.BooleanField(read_only=True)
+    is_identity_verified = serializers.BooleanField(read_only=True) # Trường mới
+
+    role = serializers.CharField(read_only=True, default='user')
+    created_at = serializers.DateTimeField(read_only=True)
+
+    address = serializers.CharField(max_length=150, required=False)
+
+    full_name = serializers.SerializerMethodField(read_only=True)
+
+    def get_full_name(self, obj):
+        # `obj` ở đây là một dictionary được lấy từ Firestore
+        first = obj.get('first_name', '')
+        last = obj.get('last_name', '')
+        return f"{first} {last}".strip()
 
 
 # =================== PROPERTY & RELATED MODELS ==========================
+# Các serializer này chủ yếu dùng để validate cấu trúc dữ liệu lồng nhau (nested)
 
-class PropertyTypeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PropertyType
-        fields = "__all__"
+class LocationSerializer(serializers.Serializer):
+    street = serializers.CharField(max_length=255)
+    ward = serializers.CharField(max_length=100)  # Giả sử lưu tên
+    district = serializers.CharField(max_length=100)
+    city = serializers.CharField(max_length=100)
+    lat = serializers.FloatField(required=False, allow_null=True)
+    lng = serializers.FloatField(required=False, allow_null=True)
 
-class DirectionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Direction
-        fields = "__all__"
 
-class UtilitySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Utility
-        fields = "__all__"
+class PropertySerializer(serializers.Serializer):
+    """
+    Validate dữ liệu khi tạo một Bất động sản mới.
+    """
+    area = serializers.FloatField()
+    has_legal_docs = serializers.BooleanField(default=False)
+    floor_num = serializers.IntegerField(required=False, allow_null=True)
+    bedroom_count = serializers.IntegerField(default=0)
+    bathroom_count = serializers.IntegerField(default=0)
 
-class CitySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = City
-        fields = "__all__"
-
-class DistrictSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = District
-        fields = "__all__"
-
-class WardSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Ward
-        fields = "__all__"
-
-class LocationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Location
-        fields = "__all__"
-
-class PropertySerializer(serializers.ModelSerializer):
+    # Dữ liệu lồng nhau
     location = LocationSerializer()
 
-    owner = UserSerializer(read_only=True)
-    property_type = PropertyTypeSerializer(read_only=True)
-    direction = DirectionSerializer(read_only=True)
-    utilities = UtilitySerializer(many=True, read_only=True)
-
-    property_type_id = serializers.IntegerField(write_only=True)
-    direction_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    # Dùng write_only để nhận ID từ client, view sẽ xử lý logic
+    property_type_id = serializers.CharField(write_only=True)  # Firestore ID là string
+    direction_id = serializers.CharField(write_only=True, required=False, allow_null=True)
     utility_ids = serializers.ListField(
-        child=serializers.IntegerField(), write_only=True, required=False
+        child=serializers.CharField(), write_only=True, required=False
     )
 
-    class Meta:
-        model = Property
-        fields = [
-            'id', 'owner', 'property_type', 'location', 'direction', 'area',
-            'has_legal_docs', 'floor_num', 'bedroom_count', 'bathroom_count',
-            'utilities', 'property_type_id', 'direction_id', 'utility_ids'
-        ]
 
-    def create(self, validated_data):
-        """
-        Ghi đè hàm create để xử lý việc tạo Location và gán utilities.
-        """
-        # 1. Tách dữ liệu của location và utilities ra khỏi dữ liệu chính.
-        location_data = validated_data.pop('location')
-        utility_ids = validated_data.pop('utility_ids', [])
+class ListingSerializer(serializers.Serializer):
+    """
+    Validate dữ liệu khi tạo một Tin đăng mới.
+    """
+    title = serializers.CharField(max_length=255)
+    content = serializers.CharField()
+    price = serializers.DecimalField(max_digits=20, decimal_places=2)
+    commission_percentage = serializers.FloatField(required=False, allow_null=True)
 
-        # 2. Tạo đối tượng Location trước.
-        location = Location.objects.create(**location_data)
+    # ID của property liên quan
+    property_id = serializers.CharField()
+    listing_type_id = serializers.CharField()
 
-        # 3. Tạo đối tượng Property với location vừa tạo và các dữ liệu còn lại.
-        # validated_data lúc này chỉ còn chứa các trường của Property.
-        prop = Property.objects.create(location=location, **validated_data)
 
-        # 4. Gán các tiện ích (utilities) cho Property.
-        if utility_ids:
-            prop.utilities.set(utility_ids)
+class PropertyMediaSerializer(serializers.Serializer):
+    """
+    Dùng để biểu diễn dữ liệu media, không dùng để tạo mới qua API
+    (vì file được xử lý trực tiếp trong view).
+    """
+    url = serializers.URLField(read_only=True)
+    media_type = serializers.CharField(read_only=True, help_text="e.g., 'image', 'video'")
+    created_at = serializers.DateTimeField(read_only=True)
 
-        return prop
-
-class PropertyUtilitySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PropertyUtility
-        fields = "__all__"
-
-class ListingTypeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ListingType
-        fields = "__all__"
-
-class ListingSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    class Meta:
-        model = Listing
-        fields = "__all__"
-
-class PropertyMediaSerializer(serializers.ModelSerializer):
-    url = serializers.PrimaryKeyRelatedField(read_only=True)
-    property = serializers.PrimaryKeyRelatedField(read_only=True)
-
-    class Meta:
-        model = PropertyMedia
-        fields = "__all__"
-
-class AnalysisDataSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = AnalysisData
-        fields = "__all__"
 
 # =================== INTERACTION ==========================
 
-class ReviewSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    property = serializers.PrimaryKeyRelatedField(read_only=True)
+class ReviewSerializer(serializers.Serializer):
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    comment = serializers.CharField(allow_blank=True)
+    # property_id sẽ được lấy từ URL, user_id lấy từ token (trong view)
 
-    class Meta:
-        model = Review
-        fields = "__all__"
 
-class WishlistSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    class Meta:
-        model = Wishlist
-        fields = "__all__"
+class WishlistSerializer(serializers.Serializer):
+    # Dùng để validate việc tạo wishlist item
+    listing_id = serializers.CharField()
+    # user_id sẽ được lấy từ token trong view
 
-class AppointmentSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    class Meta:
-        model = Appointment
-        fields = "__all__"
 
-class ContractTypeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ContractType
-        fields = "__all__"
+class AppointmentSerializer(serializers.Serializer):
+    listing_id = serializers.CharField()
+    appointment_date = serializers.DateTimeField()
+    note = serializers.CharField(required=False, allow_blank=True)
+    # user_id sẽ được lấy từ token trong view
 
-class ContractSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Contract
-        fields = "__all__"
+
+class ListingBrokerSerializer(serializers.Serializer):
+    """
+    Dùng để biểu diễn thông tin một đơn xin làm môi giới.
+    Dữ liệu tạo mới được xử lý trong view.
+    """
+    id = serializers.CharField(read_only=True)
+    listing = ListingSerializer(read_only=True)  # Hiển thị thông tin tin đăng
+    broker = UserSerializer(read_only=True)  # Hiển thị thông tin người môi giới
+    status = serializers.CharField(read_only=True)
+    created_date = serializers.DateTimeField(read_only=True)
+
 
 # =================== SOCIAL ==========================
 
-class CommentSerializer(serializers.ModelSerializer):
+class CommentSerializer(serializers.Serializer):
+    content = serializers.CharField()
+    # post_id lấy từ URL, user_id lấy từ token
+
+    # Các trường chỉ đọc để hiển thị
+    user = UserSerializer(read_only=True)  # Hiển thị thông tin người comment
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class ReactionSerializer(serializers.Serializer):
+    # Dùng để validate loại reaction
+    REACTION_CHOICES = ('like', 'love', 'haha', 'wow', 'sad', 'angry')
+    type = serializers.ChoiceField(choices=REACTION_CHOICES)
+    # post_id lấy từ URL, user_id lấy từ token
+
+
+class PostSerializer(serializers.Serializer):
+    """
+    Dùng để validate khi tạo và biểu diễn khi đọc một bài Post.
+    """
+    title = serializers.CharField(max_length=255)
+    content = serializers.CharField()
+
+    # Các trường chỉ đọc, dùng cho output
     user = UserSerializer(read_only=True)
-    post = serializers.PrimaryKeyRelatedField(read_only=True)
+    comments = CommentSerializer(many=True, read_only=True, default=[])
+    reactions = ReactionSerializer(many=True, read_only=True, default=[])
+    created_at = serializers.DateTimeField(read_only=True)
 
-
-    class Meta:
-        model = Comment
-        fields = "__all__"
-
-class ReactionSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    class Meta:
-        model = Reaction
-        fields = "__all__"
-
-class PostSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    comments = CommentSerializer(many=True, read_only=True)
-    reactions = ReactionSerializer(many=True, read_only=True)
-
+    # Giữ lại các method field này rất hữu ích
     comment_count = serializers.SerializerMethodField()
     reaction_count = serializers.SerializerMethodField()
 
-    class Meta:
-        model = Post
-        fields = "__all__"
-
     def get_comment_count(self, obj):
-        return obj.comments.count()
+        # obj là dict, 'comments' là một list các dict
+        if 'comments' in obj and isinstance(obj['comments'], list):
+            return len(obj['comments'])
+        return 0
 
     def get_reaction_count(self, obj):
-        return obj.reactions.count()
+        if 'reactions' in obj and isinstance(obj['reactions'], list):
+            return len(obj['reactions'])
+        return 0
 
-class SubscriptionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subscription
-        fields = "__all__"
+
+class SubscriptionSerializer(serializers.Serializer):
+    """
+    Dùng để biểu diễn một quan hệ theo dõi. Logic tạo/xóa nằm trong view.
+    """
+    follower_id = serializers.CharField(read_only=True)
+    following_id = serializers.CharField(read_only=True)
+    followed_at = serializers.DateTimeField(read_only=True)
+
 
 # =================== NOTIFICATION & REPORT ==========================
 
-class NotificationCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = NotificationCategory
-        fields = "__all__"
-
-class NotificationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Notification
-        fields = "__all__"
-
-class ReportSerializer(serializers.ModelSerializer):
-    reporter = serializers.PrimaryKeyRelatedField(read_only=True)
-
-    class Meta:
-        model = Report
-        fields = "__all__"
+class NotificationSerializer(serializers.Serializer):
+    """
+    Dùng để biểu diễn thông báo. Logic tạo nằm trong hệ thống (ví dụ: Celery tasks).
+    """
+    id = serializers.CharField(read_only=True)
+    user_id = serializers.CharField(read_only=True)
+    category = serializers.CharField(read_only=True)
+    title = serializers.CharField(read_only=True)
+    content = serializers.CharField(read_only=True)
+    is_read = serializers.BooleanField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
 
 
-class ProtestSerializer(serializers.ModelSerializer):
-    # protester = serializers.HiddenField(default=serializers.CurrentUserDefault())
-    protester = serializers.PrimaryKeyRelatedField(read_only=True)
-    # listing sẽ được lấy từ URL, nên không cần client gửi lên
-    listing = serializers.PrimaryKeyRelatedField(read_only=True)
+class ReportSerializer(serializers.Serializer):
+    """
+    Validate dữ liệu khi người dùng tạo một báo cáo.
+    """
+    REPORT_TYPES = ('spam', 'scam', 'inappropriate', 'other')
 
-    class Meta:
-        model = Protest
-        # Client chỉ cần gửi lên lý do kháng nghị
-        fields = ['id', 'listing', 'protester', 'reason', 'status', 'created_date']
-        read_only_fields = ['status', 'created_date']
+    report_type = serializers.ChoiceField(choices=REPORT_TYPES)
+    description = serializers.CharField()
+
+    # ID của đối tượng bị báo cáo (ví dụ: listing_id, user_id, post_id)
+    # Sử dụng một trường chung để linh hoạt
+    reported_item_id = serializers.CharField()
+    reported_item_type = serializers.ChoiceField(choices=('listing', 'user', 'post', 'comment'))
+
+
+class ProtestSerializer(serializers.Serializer):
+    """
+    Validate lý do khi người dùng kháng nghị.
+    """
+    reason = serializers.CharField()
+    # listing_id sẽ lấy từ URL, protester_id sẽ lấy từ token (trong view)
