@@ -1,0 +1,8 @@
+Chạy im lặng (Quiet Mode) ---- Full test
+pytest -q
+
+Di chuyển đến thư mục landifys/ và chạy:
+pytest -s --show-steps tests/services/test_accounts/test_toggle_user_follow.py
+
+Hoặc từ thư mục gốc landifyapis/:
+pytest -s --show-steps landifys/tests/services/test_accounts/test_toggle_user_follow.py
