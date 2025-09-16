@@ -40,6 +40,7 @@ ALLOWED_HOSTS = ["*"] # Sẽ cần sửa lại khi deploy
 # =============================================================================
 
 INSTALLED_APPS = [
+    "corsheaders",
     "channels",
     "django.contrib.gis",
     "django.contrib.admin",
@@ -72,6 +73,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -112,6 +114,18 @@ DATABASES = {
         "PASSWORD": os.getenv('DB_PASSWORD'),
         "HOST": os.getenv('DB_HOST', 'localhost'),
         "PORT": os.getenv('DB_PORT', '5432'),
+    },
+    "legacy_mysql": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": "du_an_ban_dat",  # Tên CSDL MySQL cũ
+        "USER": "root",      # Thay bằng user của bạn
+        "PASSWORD": "Abc@123",  # Thay bằng mật khẩu của bạn
+        "HOST": "localhost",            # Hoặc IP của server MySQL
+        "PORT": "3306",
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            'charset': 'utf8mb4',
+        },
     }
 }
 
@@ -277,3 +291,15 @@ LOGGING = {
 GOOGLE_CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE')
 GOOGLE_APPLICATION_CREDENTIALS = str(BASE_DIR / GOOGLE_CREDENTIALS_FILE)
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_APPLICATION_CREDENTIALS
+
+# ==============================================================================
+# CORS (CROSS-ORIGIN RESOURCE SHARING) SETTINGS
+# ==============================================================================
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # Frontend Next.js của bạn
+    "http://127.0.0.1:3000", # Thêm cả địa chỉ này cho chắc chắn
+    "http://192.168.137.1:3000",  # Thêm cả địa chỉ này cho chắc chắn
+]
+
+# (Tùy chọn) Nếu bạn cần gửi cookie hoặc header Authorization
+CORS_ALLOW_CREDENTIALS = True

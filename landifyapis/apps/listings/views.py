@@ -19,7 +19,7 @@ from apps.common.docs import listings_docs, media_docs
 
 # Modules
 from apps.common import perms, tasks
-from .models import Property, Listing, VipType, ListingType, UserPromotion
+from .models import Property, Listing, VipType, ListingType, UserPromotion, ListingCategory
 from .filters import ListingFilter
 from . import services as listing_services
 from .serializers import ListingPreviewSerializer, ListingDetailSerializer, ListingCreateSerializer
@@ -39,7 +39,7 @@ from .option_serializers import (
     UnitPriceOptionSerializer,
     VipTypeOptionSerializer,
     PropertyFeatureSerializer,
-    UserPromotionOptionSerializer, ListingTypeOptionSerializer,
+    UserPromotionOptionSerializer, ListingTypeOptionSerializer, ListingCategoryOptionSerializer,
 )
 from django.utils import timezone
 #------------SEARCH LISTING------------
@@ -48,6 +48,9 @@ from vi_address.models import City
 from ..interactions.models import Wishlist
 from ..interactions.serializers import WishlistSerializer
 
+from django.contrib.gis.geos import Point
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.measure import D
 
 @listings_docs.listing_viewset_schema
 class ListingViewSet(viewsets.ModelViewSet):
@@ -145,21 +148,21 @@ class ListingViewSet(viewsets.ModelViewSet):
         except BusinessLogicError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    @listings_docs.protest_listing_schema
-    @action(methods=["post"], detail=True)
-    def protest(self, request, public_id=None): # <<< Đổi tên tham số cho nhất quán
-        """Người dùng kháng nghị khi tin đăng của họ bị từ chối/gắn cờ."""
-        listing = self.get_object()
-        serializer = ProtestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        try:
-            protest = listing_services.create_protest_for_listing(
-                listing=listing, protester=request.user, serializer=serializer
-            )
-            return Response(ProtestSerializer(protest).data, status=status.HTTP_201_CREATED)
-        except BusinessLogicError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    # @listings_docs.protest_listing_schema
+    # @action(methods=["post"], detail=True)
+    # def protest(self, request, public_id=None): # <<< Đổi tên tham số cho nhất quán
+    #     """Người dùng kháng nghị khi tin đăng của họ bị từ chối/gắn cờ."""
+    #     listing = self.get_object()
+    #     serializer = ProtestSerializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+    #
+    #     try:
+    #         protest = listing_services.create_protest_for_listing(
+    #             listing=listing, protester=request.user, serializer=serializer
+    #         )
+    #         return Response(ProtestSerializer(protest).data, status=status.HTTP_201_CREATED)
+    #     except BusinessLogicError as e:
+    #         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(methods=["post"], detail=True, url_path="wishlist")
     def wishlist(self, request, public_id=None):
@@ -199,6 +202,34 @@ class ListingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(methods=["get"], detail=False, url_path="potential")
+    def potential(self, request):
+        """
+        Gợi ý các tin đăng tiềm năng nhất dựa trên vị trí và nhiều yếu tố khác.
+        Yêu cầu các tham số query: 'lat' (vĩ độ) và 'lng' (kinh độ).
+        """
+        try:
+            lat = float(request.query_params.get('lat'))
+            lng = float(request.query_params.get('lng'))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "Vui lòng cung cấp vĩ độ ('lat') và kinh độ ('lng') hợp lệ."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Gọi service để lấy queryset đã được tính điểm và sắp xếp
+        potential_listings_qs = listing_services.find_potential_listings(latitude=lat, longitude=lng)
+
+        # Phân trang và trả về kết quả
+        page = self.paginate_queryset(potential_listings_qs)
+        if page is not None:
+            # Dùng ListingPreviewSerializer, nó sẽ tự động lấy trường 'potential_score'
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(potential_listings_qs, many=True, context={'request': request})
+        return Response(serializer.data)
+
 class ListingFilterOptionsView(APIView):
     """
     Cung cấp các dữ liệu cần thiết để xây dựng giao diện bộ lọc.
@@ -232,8 +263,8 @@ class ListingCreationOptionsView(APIView):
 
     def get(self, request, format=None):
         # Truy vấn tất cả các lựa chọn từ database
-        property_types = PropertyType.objects.filter(active=True)
-        listing_types = ListingType.objects.filter(active=True)
+        # property_types = PropertyType.objects.filter(active=True)
+        # listing_types = ListingType.objects.filter(active=True)
         directions = Direction.objects.filter(active=True)
         legal_statuses = LegalStatus.objects.filter(active=True)
         unit_prices = UnitPrice.objects.all()  # Giả sử UnitPrice không có cờ active
@@ -245,11 +276,26 @@ class ListingCreationOptionsView(APIView):
             status=UserPromotion.Status.AVAILABLE,
             expiry_date__gte=timezone.now()
         )
+        categories = ListingCategory.objects.select_related('listing_type', 'property_type').order_by('listing_type__id', 'id')
+
+        grouped_categories = {}
+        for category in categories:
+            lt = category.listing_type
+            if lt.code not in grouped_categories:
+                grouped_categories[lt.code] = {
+                    'listing_type_name': lt.name,
+                    'listing_type_code': lt.code,
+                    'categories': []
+                }
+            grouped_categories[lt.code]['categories'].append(
+                ListingCategoryOptionSerializer(category).data
+            )
 
         # Serialize dữ liệu
         data = {
-            'property_types': PropertyTypeOptionSerializer(property_types, many=True).data,
-            'listing_types': ListingTypeOptionSerializer(listing_types, many=True).data,
+            # 'property_types': PropertyTypeOptionSerializer(property_types, many=True).data,
+            # 'listing_types': ListingTypeOptionSerializer(listing_types, many=True).data,
+            'grouped_categories': list(grouped_categories.values()),
             'directions': DirectionOptionSerializer(directions, many=True).data,
             'legal_statuses': LegalStatusOptionSerializer(legal_statuses, many=True).data,
             'unit_prices': UnitPriceOptionSerializer(unit_prices, many=True).data,

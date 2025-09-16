@@ -38,95 +38,94 @@ def verify_phone_otp(*, user: User, otp_code: str) -> bool:
 def process_id_card_verification(*, user: User, id_card_image: IO) -> Dict[str, Any]:
     """Thực hiện bước 1 của eKYC: Đọc thông tin CCCD, lưu cache và cập nhật DB."""
     try:
-        idr_response = ekyc.call_fpt_idr_api(id_card_image)
-        if idr_response.get("errorCode") != 0:
+        ocr_data = ekyc.call_cccd_ocr_api(id_card_image)
+        if not ocr_data or not ocr_data.get("ID_number"):
             raise EkycError("Không thể đọc thông tin từ ảnh CCCD. Vui lòng thử lại với ảnh rõ nét hơn.")
 
-        extracted_data = idr_response.get("data")[0]
+        #extracted_data = idr_response.get("data")[0]
 
         with transaction.atomic():
-            id_card_image.seek(0)
-            cache.set(f"ekyc_image_{user.id}", id_card_image.read(), timeout=86400)
+            cache.set(f"ekyc_ocr_data_{user.id}", ocr_data, timeout=86400)
+
             user.is_id_card_verified = True
             profile = user.profile
 
-            profile.id_card_number = extracted_data.get('id')
-            profile.nationality = extracted_data.get('nationality')
-            profile.home_town = extracted_data.get('home')
-            profile.address = extracted_data.get('address')
+            profile.id_card_number = ocr_data.get('ID_number')
+            profile.nationality = ocr_data.get('Nationality') or "Việt Nam" # Gán mặc định nếu rỗng
+            profile.home_town = ocr_data.get('Place_of_origin')
+            profile.address = ocr_data.get('Place_of_residence')
 
-            address_entities = extracted_data.get('address_entities', {})
-            if address_entities and isinstance(address_entities, dict):
-                # Ưu tiên lấy tỉnh/thành phố, nếu không có thì lấy quận/huyện
-                province = address_entities.get('province')
-                district = address_entities.get('district')
-                if province:
-                    profile.location = province
-                elif district:
-                    profile.location = district
+            # address_entities = extracted_data.get('address_entities', {})
+            # if address_entities and isinstance(address_entities, dict):
+            #     # Ưu tiên lấy tỉnh/thành phố, nếu không có thì lấy quận/huyện
+            #     province = address_entities.get('province')
+            #     district = address_entities.get('district')
+            #     if province:
+            #         profile.location = province
+            #     elif district:
+            #         profile.location = district
 
-            gender_str = extracted_data.get('sex', '').lower()
+            gender_str = ocr_data.get('Gender', '').lower()
             if gender_str == 'nam':
                 profile.gender = User.Gender.MALE
             elif gender_str == 'nữ':
                 profile.gender = User.Gender.FEMALE
 
-            dob_str = extracted_data.get('dob')
+            dob_str = ocr_data.get('Date_of_birth')
             if dob_str:
                 try:
-                    # FPT AI trả về định dạng "dd/mm/yyyy"
                     profile.date_of_birth = datetime.strptime(dob_str, "%d/%m/%Y").date()
                 except ValueError:
-                    # Bỏ qua nếu định dạng ngày tháng không đúng
                     pass
 
-            full_name = extracted_data.get('name', '')
+            full_name = ocr_data.get('Name', '').strip()
             if full_name:
-                name_parts = full_name.strip().split(' ')
+                name_parts = full_name.split(' ')
                 if len(name_parts) > 1:
-                    user.first_name = name_parts[-1]  # Lấy phần cuối làm tên
-                    user.last_name = ' '.join(name_parts[:-1])  # Phần còn lại làm họ
+                    # Lấy từ đầu tiên làm Họ (first_name)
+                    user.first_name = name_parts[0]
+                    # Các từ còn lại làm Tên đệm và Tên (last_name)
+                    user.last_name = ' '.join(name_parts[1:])
                 else:
-                    user.first_name = full_name  # Nếu chỉ có 1 từ
-                    user.last_name = ''
+                    # Nếu chỉ có một từ, coi đó là Tên (last_name) và Họ (first_name) rỗng
+                    # Hoặc bạn có thể gán nó cho first_name tùy theo quy ước
+                    user.first_name = ''
+                    user.last_name = full_name
 
             user.save(update_fields=['is_id_card_verified', 'first_name', 'last_name'])
             profile.save(update_fields=[
                 'id_card_number', 'nationality', 'home_town',
-                'address', 'gender', 'date_of_birth', 'location',
+                'address', 'gender', 'date_of_birth',
             ])
 
-        return extracted_data
+        return ocr_data
     except Exception as e:
         raise EkycError(f"Đã có lỗi xảy ra trong quá trình xử lý ảnh: {e}")
 
 
 def complete_ekyc_liveness_check(*, user: User, video_file: IO):
     """Thực hiện bước 2 của eKYC: xác thực người thật và so khớp khuôn mặt."""
-    id_card_image_data = cache.get(f"ekyc_image_{user.id}")
-    if not id_card_image_data:
+    ocr_data_from_cache = cache.get(f"ekyc_ocr_data_{user.id}")
+    if not ocr_data_from_cache:
         raise EkycError("Phiên xác thực đã hết hạn hoặc không tồn tại. Vui lòng bắt đầu lại từ bước 1.")
 
     try:
-        liveness_response = ekyc.call_fpt_liveness_api(video_file, id_card_image_data)
+        liveness_response = ekyc.call_liveness_verification_api(video_file, ocr_data_from_cache)
     except Exception as e:
         raise EkycError(f"Không thể kết nối đến dịch vụ xác thực: {e}")
 
-    is_live = liveness_response.get("liveness", {}).get("is_live") == "true"
-    is_match = liveness_response.get("face_match", {}).get("isMatch") == "true"
+    is_verified = liveness_response.get("verified")
 
-    if not is_live or not is_match:
-        errors = []
-        if not is_live:
-            errors.append("Hệ thống nhận diện không phải người thật.")
-        if not is_match:
-            errors.append("Khuôn mặt không khớp với ảnh trên CCCD.")
-        raise EkycError(" ".join(errors))
-
-    with transaction.atomic():
-        user.is_identity_verified = True
-        user.save(update_fields=["is_identity_verified"])
-        cache.delete(f"ekyc_image_{user.id}")
+    if is_verified is True:
+        # Nếu xác thực thành công, cập nhật trạng thái và xóa cache
+        with transaction.atomic():
+            user.is_identity_verified = True
+            user.save(update_fields=["is_identity_verified"])
+            cache.delete(f"ekyc_ocr_data_{user.id}")
+    else:
+        # Nếu xác thực thất bại, lấy message từ API và ném lỗi
+        error_message = liveness_response.get("message", "Xác thực không thành công. Vui lòng thử lại.")
+        raise EkycError(error_message)
 
 def generate_agora_token(*, channel_name: str, uid: int) -> Dict[str, Any]:
     """Tạo token cho dịch vụ gọi video Agora."""

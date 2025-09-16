@@ -21,15 +21,22 @@ def populate_properties_data(apps, schema_editor):
 
     # --- Tạo dữ liệu mới ---
     PropertyType.objects.bulk_create([
-        PropertyType(name="Căn hộ", code="APARTMENT"),
-        PropertyType(name="Nhà phố", code="TOWNHOUSE"),
-        PropertyType(name="Đất nền", code="LAND"),
+        PropertyType(name="Căn hộ chung cư", code="APARTMENT"),
+        PropertyType(name="Chung cư mini, căn hộ dịch vụ", code="MINI_APARTMENT_SERVICE"),
+        PropertyType(name="Nhà riêng", code="TOWNHOUSE"),
+        PropertyType(name="Nhà biệt thự, liền kề", code="VILLA"),
+        PropertyType(name="Nhà mặt phố", code="STREET_HOUSE"),
+        PropertyType(name="Nhà trọ, phòng trọ", code="MOTEL_ROOM"),
+        PropertyType(name="Shophouse, nhà phố thương mại", code="SHOPHOUSE"),
         PropertyType(name="Văn phòng", code="OFFICE"),
-        PropertyType(name="Biệt thự", code="VILLA"),
-        PropertyType(name="Phòng trọ", code="MOTEL_ROOM"),
-        PropertyType(name="Kho, xưởng", code="WAREHOUSE"),
+        PropertyType(name="Cửa hàng, ki ốt", code="KIOSK"),
+        PropertyType(name="Kho, nhà xưởng", code="WAREHOUSE"),
+        PropertyType(name="Đất", code="LAND"),
+        PropertyType(name="Trang trại, khu nghỉ dưỡng", code="FARM_RESORT"),
+        PropertyType(name="Condotel", code="CONDO"),
+        PropertyType(name="Bất động sản khác", code="OTHER_REAL_ESTATE"),
     ])
-    print("Created PropertyType records.")
+    print("Created CORE PropertyType records.")
 
     Direction.objects.bulk_create([
         Direction(name="Đông", code="EAST", element="Mộc"),

@@ -1,7 +1,7 @@
 # apps/listings/option_serializers.py
 from rest_framework import serializers
 from apps.properties.models import PropertyType, Direction, LegalStatus, PropertyFeature
-from .models import UnitPrice, VipType, UserPromotion, ListingType
+from .models import UnitPrice, VipType, UserPromotion, ListingType, ListingCategory
 from apps.properties.serializers import PropertyFeatureSerializer
 from ..common.frontend_maps import property_type_maps, direction_maps, legal_status_maps
 
@@ -15,6 +15,19 @@ class PropertyTypeOptionSerializer(serializers.ModelSerializer):
 
     def get_icon_code(self, obj: PropertyType) -> str:
         return property_type_maps.get_property_type_frontend_info(obj.code).get('icon_code')
+
+class ListingCategoryOptionSerializer(serializers.ModelSerializer):
+    """
+    Serializer để hiển thị các lựa chọn danh mục hợp lệ, đã được nhóm lại.
+    """
+    # Sử dụng CharField và trỏ source đến property `display_name`
+    name = serializers.CharField(source='display_name', read_only=True)
+    property_type_code = serializers.CharField(source='property_type.code')
+
+    class Meta:
+        model = ListingCategory
+        # ID cần thiết để client gửi lên khi tạo tin
+        fields = ['id', 'name', 'property_type_code']
 
 class ListingTypeOptionSerializer(serializers.ModelSerializer):
     """

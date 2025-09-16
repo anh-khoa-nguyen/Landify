@@ -37,6 +37,31 @@ class ListingType(BaseModel):
         verbose_name = "Loại tin đăng"
         verbose_name_plural = "Các Loại tin đăng"
 
+
+class ListingCategory(BaseModel):
+    """
+    Model để định nghĩa các cặp (ListingType, PropertyType) hợp lệ.
+    Đây là "bảng quy tắc" tinh gọn, không chứa dữ liệu dư thừa.
+    """
+
+    listing_type = models.ForeignKey(ListingType, on_delete=models.CASCADE)
+    property_type = models.ForeignKey('properties.PropertyType', on_delete=models.CASCADE)
+
+    # Thêm một property để tự động tạo ra tên hiển thị khi cần
+    @property
+    def display_name(self):
+        # Ví dụ: "Mua Bán" + " " + "Căn hộ chung cư" -> "Mua Bán Căn hộ chung cư"
+        return f"{self.listing_type.name} {self.property_type.name}"
+
+    def __str__(self):
+        return self.display_name
+
+    class Meta:
+        verbose_name = "Danh mục Hợp lệ"
+        verbose_name_plural = "Các Danh mục Hợp lệ"
+        unique_together = ('listing_type', 'property_type')
+        ordering = ['listing_type__name', 'property_type__name']
+
 class VipType(BaseModel):
     """
     Model để định nghĩa các loại gói VIP cho tin đăng.

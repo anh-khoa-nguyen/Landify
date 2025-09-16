@@ -13,9 +13,14 @@ from .serializers import UserCreateSerializer, UserSerializer, UserUpdateSeriali
 
 from apps.listings.serializers import ListingPreviewSerializer
 from apps.interactions.serializers import WishlistSerializer
-from ..interactions.models import Wishlist
+from ..interactions.models import Wishlist, Cooperation, Review
 from ..listings.models import Listing
 
+from django.db.models import Q
+from django.contrib.contenttypes.models import ContentType
+from apps.social.models import Post, Comment
+from apps.moderation.models import Report
+from apps.moderation.serializers import ReportSerializer
 
 # =================== USER & AUTHENTICATION ==========================
 
@@ -108,7 +113,7 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(methods=["get"], detail=False, url_path="me/wishlist")
-    def wishlist(self, request):
+    def my_wishlist(self, request):
         """
         Trả về danh sách các tin đăng trong wishlist của người dùng hiện tại.
         """
@@ -128,28 +133,127 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = ListingPreviewSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
-    @accounts_docs.disable_account_schema
-    @action(methods=["patch"], detail=True, url_path="disable")
-    def disable_account(self, request, pk=None):
-        """[Admin] Vô hiệu hóa hoặc kích hoạt lại tài khoản người dùng."""
-        user_to_toggle = self.get_object()
-        try:
-            new_status = accounts_services.disable_user_account(admin_user=request.user, user_to_disable=user_to_toggle)
-            status_text = "kích hoạt" if new_status else "vô hiệu hóa"
-            return Response(
-                {"message": f"Đã {status_text} tài khoản '{user_to_toggle.username}'."}, status=status.HTTP_200_OK
-            )
-        except BusinessLogicError as e:
-            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+    @action(methods=["get"], detail=False, url_path="me/listings")
+    def my_listings(self, request):
+        """
+        Trả về danh sách tất cả các tin đăng của người dùng hiện tại,
+        bao gồm cả tin đã ẩn hoặc có trạng thái khác AVAILABLE.
+        """
+        user = request.user
 
-class SubscriptionSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
-    """Serializer cho model Subscription (Theo dõi)."""
+        # 1. Truy vấn tất cả tin đăng của người dùng này, sắp xếp theo ngày tạo mới nhất
+        #    Quan trọng: Chúng ta không lọc theo active=True hay status='AVAILABLE'
+        #    vì người dùng cần xem tất cả tin đăng của họ để quản lý.
+        queryset = Listing.objects.filter(user=user).order_by('-created_date')
 
-    # Hiển thị thông tin chi tiết của người theo dõi và người được theo dõi
-    follower = UserSerializer(read_only=True, fields=("id", "get_full_name", "profile.avatar"))
-    following = UserSerializer(read_only=True, fields=("id", "get_full_name", "profile.avatar"))
+        # 2. Phân trang kết quả
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            # Dùng ListingPreviewSerializer để trả về dữ liệu gọn nhẹ, phù hợp cho danh sách
+            serializer = ListingPreviewSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
 
-    class Meta:
-        model = Subscription
-        fields = "__all__"
-        read_only_fields = ["follower", "following"]
+        # 3. Serialize và trả về nếu không phân trang
+        serializer = ListingPreviewSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=False, url_path="me/reports-received")
+    def reports_received(self, request):
+        """
+        Trả về danh sách các báo cáo mà người khác đã gửi nhắm vào
+        nội dung (tin đăng, bài viết, bình luận) của người dùng hiện tại.
+        """
+        user = request.user
+
+        # 1. Lấy ContentType cho các model có thể bị báo cáo
+        listing_ct = ContentType.objects.get_for_model(Listing)
+        post_ct = ContentType.objects.get_for_model(Post)
+        comment_ct = ContentType.objects.get_for_model(Comment)
+        user_ct = ContentType.objects.get_for_model(User)
+
+        # 2. Tìm ID của tất cả nội dung thuộc sở hữu của người dùng
+        my_listing_ids = Listing.objects.filter(user=user).values_list('id', flat=True)
+        my_post_ids = Post.objects.filter(user=user).values_list('id', flat=True)
+        my_comment_ids = Comment.objects.filter(user=user).values_list('id', flat=True)
+
+        # 3. Xây dựng các điều kiện truy vấn (Q objects)
+        # Báo cáo nhắm vào tin đăng của tôi
+        listing_reports_q = Q(reported_item_type=listing_ct, reported_item_id__in=my_listing_ids)
+        # Báo cáo nhắm vào bài viết của tôi
+        post_reports_q = Q(reported_item_type=post_ct, reported_item_id__in=my_post_ids)
+        # Báo cáo nhắm vào bình luận của tôi
+        comment_reports_q = Q(reported_item_type=comment_ct, reported_item_id__in=my_comment_ids)
+        # Báo cáo nhắm vào chính tài khoản của tôi
+        user_reports_q = Q(reported_item_type=user_ct, reported_item_id=user.id)
+
+        # 4. Kết hợp các điều kiện và truy vấn
+        queryset = Report.objects.filter(
+            listing_reports_q | post_reports_q | comment_reports_q | user_reports_q
+        ).order_by('-created_date')
+
+        # 5. Phân trang và trả về kết quả
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = ReportSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ReportSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=False, url_path="me/cooperations-received")
+    def cooperations_received(self, request):
+        """
+        Trả về danh sách các yêu cầu hợp tác mà người dùng hiện tại đã NHẬN ĐƯỢỢC
+        (với vai trò là chủ tin đăng).
+        """
+        user = request.user
+        # Lọc các Cooperation mà người dùng hiện tại là 'owner'
+        queryset = Cooperation.objects.filter(owner=user).order_by('-created_date')
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=False, url_path="me/cooperations-sent")
+    def cooperations_sent(self, request):
+        """
+        Trả về danh sách các yêu cầu hợp tác mà người dùng hiện tại đã GỬI ĐI
+        (với vai trò là môi giới).
+        """
+        user = request.user
+        # Lọc các Cooperation mà người dùng hiện tại là 'agent'
+        queryset = Cooperation.objects.filter(agent=user).order_by('-created_date')
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=False, url_path="me/reviews")
+    def my_reviews(self, request):
+        """
+        Trả về danh sách tất cả các đánh giá (review) mà người dùng hiện tại đã gửi.
+        """
+        user = request.user
+
+        # Lọc các Review mà người dùng hiện tại là 'user'
+        # Dùng select_related để tối ưu, lấy sẵn thông tin của Bất động sản liên quan
+        queryset = Review.objects.filter(user=user).select_related(
+            'property__property_type',
+            'property__location'
+        ).order_by('-created_date')
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)

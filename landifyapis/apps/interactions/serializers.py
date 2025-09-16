@@ -66,6 +66,9 @@ class ReviewSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True, fields=("id", "get_full_name", "profile.avatar"))
     property = serializers.PrimaryKeyRelatedField(read_only=True)
 
+    latitude = serializers.FloatField(write_only=True, required=True)
+    longitude = serializers.FloatField(write_only=True, required=True)
+
     class Meta:
         model = Review
         # Chỉ bao gồm các trường mà client gửi lên và các trường read_only
@@ -76,6 +79,8 @@ class ReviewSerializer(serializers.ModelSerializer):
             'rating',
             'comment',
             'created_date',
+            'latitude',
+            'longitude',
         ]
         # Các trường này sẽ được cung cấp từ view/service, không phải từ client
         read_only_fields = ['user', 'property']

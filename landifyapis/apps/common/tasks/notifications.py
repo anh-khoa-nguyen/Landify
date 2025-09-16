@@ -1,67 +1,55 @@
+# apps/common/tasks/notifications.py
 from celery import shared_task
-
 from apps.users.models import User
-from apps.moderation.models import Protest
-
 from ..utils import firebase
+import logging
 
-@shared_task(name="notify_admins_of_new_protest")
-def notify_admins_of_new_protest(protest_id: int):
+logger = logging.getLogger(__name__)
+
+# === TÁC VỤ TỔNG QUÁT MỚI: Gửi thông báo cho MỘT người dùng ===
+@shared_task(name="notifications.send_to_user")
+def send_notification_to_user(user_id: int, category: str, title: str, content: str, related_item: dict = None):
     """
-    Tác vụ nền để gửi thông báo về kháng nghị mới đến tất cả các admin.
+    Tác vụ nền tổng quát để gửi một thông báo Firestore đến một người dùng cụ thể.
     """
     try:
-        protest = Protest.objects.select_related("protester", "listing").get(id=protest_id)
+        firebase.send_firestore_notification(
+            user_id=user_id,
+            category=category,
+            title=title,
+            content=content,
+            related_item=related_item
+        )
+        logger.info(f"Đã gửi yêu cầu thông báo (category: {category}) đến user ID: {user_id}")
+    except Exception as e:
+        logger.error(f"Lỗi (Task) khi gửi thông báo cho user ID {user_id}: {e}")
 
-        protester_username = protest.protester.get_full_name() or protest.protester.username
-        listing_title = protest.listing.title
 
-        title = f"Kháng nghị mới cho tin: '{listing_title}'"
-        content = f"Người dùng '{protester_username}' đã gửi một kháng nghị. Vui lòng xem xét."
-        related_item = {"type": "protest", "id": protest_id}
-
+# === TÁC VỤ TỔNG QUÁT MỚI: Gửi thông báo cho TẤT CẢ admin ===
+@shared_task(name="notifications.send_to_admins")
+def send_notification_to_admins(category: str, title: str, content: str, related_item: dict = None):
+    """
+    Tác vụ nền tổng quát để gửi cùng một thông báo đến tất cả các admin đang hoạt động.
+    """
+    try:
         admin_users = User.objects.filter(role=User.Role.ADMIN, is_active=True)
-        if not admin_users:
-            print("Không tìm thấy admin nào để gửi thông báo.")
+        if not admin_users.exists():
+            logger.warning("Không tìm thấy admin nào để gửi thông báo.")
             return
 
         for admin in admin_users:
+            # Gọi hàm gửi thông báo cấp thấp cho từng admin
             firebase.send_firestore_notification(
-                user_id=admin.id, category="new_protest", title=title, content=content, related_item=related_item
+                user_id=admin.id,
+                category=category,
+                title=title,
+                content=content,
+                related_item=related_item
             )
 
-        print(f"Đã gửi yêu cầu thông báo kháng nghị (ID: {protest_id}) đến {admin_users.count()} admin.")
-
-    except Protest.DoesNotExist:
-        print(f"LỖI: Protest với ID {protest_id} không tồn tại.")
+        logger.info(f"Đã gửi yêu cầu thông báo (category: {category}) đến {admin_users.count()} admin.")
     except Exception as e:
-        print(f"Lỗi khi gửi thông báo kháng nghị: {e}")
+        logger.error(f"Lỗi (Task) khi gửi thông báo hàng loạt cho admin: {e}")
 
-
-@shared_task(name="notify_user_of_protest_resolution")
-def notify_user_of_protest_resolution(protest_id: int):
-    """
-    Tác vụ nền để gửi thông báo về kết quả xử lý kháng nghị cho người dùng.
-    """
-    try:
-        protest = Protest.objects.select_related("protester", "listing").get(id=protest_id)
-
-        user_id = protest.protester.id
-        listing_title = protest.listing.title
-        protest_status_display = protest.get_status_display()
-        resolution_note = protest.resolution_note
-
-        title = f"Kháng nghị của bạn cho tin '{listing_title}' đã được xử lý"
-        content = f"Kết quả: {protest_status_display}.\n" f"Ghi chú từ quản trị viên: {resolution_note}"
-        related_item = {"type": "listing", "id": protest.listing.id}
-
-        firebase.send_firestore_notification(
-            user_id=user_id, category="protest_resolution", title=title, content=content, related_item=related_item
-        )
-
-        print(f"Đã gửi yêu cầu thông báo kết quả kháng nghị cho user ID: {user_id}")
-
-    except Protest.DoesNotExist:
-        print(f"LỖI: Protest với ID {protest_id} không tồn tại.")
-    except Exception as e:
-        print(f"Lỗi khi gửi thông báo kết quả kháng nghị cho user ID {protest_id}: {e}")
+# Các tác vụ cũ (notify_admins_of_new_protest và notify_user_of_protest_resolution)
+# bây giờ đã có thể xóa đi vì chúng ta đã có các phiên bản tổng quát hơn.

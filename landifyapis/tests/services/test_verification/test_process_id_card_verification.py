@@ -25,7 +25,7 @@ def test_process_id_card_fails_on_api_error(mock_fpt_api, log_step):
 
 
 @patch('django.core.cache.cache.set')
-@patch('landifys.utils.ekyc.call_fpt_idr_api')
+# @patch('landifys.utils.ekyc.call_fpt_idr_api')
 @pytest.mark.django_db
 @pytest.mark.step_log
 def test_process_id_card_succeeds(mock_fpt_api, mock_cache_set, log_step):

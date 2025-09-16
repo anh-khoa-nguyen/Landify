@@ -3,7 +3,8 @@
 from rest_framework import serializers
 
 from apps.common.mixins import DynamicFieldsMixin
-from apps.users.models import User, UserProfile
+from apps.users.models import User, UserProfile, Subscription
+
 
 class UserProfileSimpleSerializer(serializers.ModelSerializer):
     """Serializer đơn giản chỉ để lấy avatar và các thông tin cần thiết khác."""
@@ -134,3 +135,15 @@ class UserProfileDetailSerializer(DynamicFieldsMixin, serializers.ModelSerialize
             "follower_count",
             "following_count",
         ]
+
+class SubscriptionSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
+    """Serializer cho model Subscription (Theo dõi)."""
+
+    # Hiển thị thông tin chi tiết của người theo dõi và người được theo dõi
+    follower = UserSerializer(read_only=True, fields=("id", "get_full_name", "profile.avatar"))
+    following = UserSerializer(read_only=True, fields=("id", "get_full_name", "profile.avatar"))
+
+    class Meta:
+        model = Subscription
+        fields = "__all__"
+        read_only_fields = ["follower", "following"]

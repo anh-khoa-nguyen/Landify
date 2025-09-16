@@ -12,7 +12,8 @@ from apps.properties.serializers import PropertySerializer, PropertyFeatureSeria
 from apps.common.utils.hashids import hashids
 from apps.properties.models import Property, PropertyType, PropertyFeature, Direction, LegalStatus
 
-from .models import ListingPropertyFeatureValue, Listing, ListingType, UnitPrice, VipType, UserPromotion
+from .models import ListingPropertyFeatureValue, Listing, ListingType, UnitPrice, VipType, UserPromotion, \
+    ListingCategory
 from .models import BuySellDetail, ProjectDetail, RentalDetail
 from . import services as listings_services
 
@@ -112,6 +113,9 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
     total_video_count = serializers.SerializerMethodField()
 
     is_in_wishlist = serializers.SerializerMethodField()
+    distance_km = serializers.SerializerMethodField()
+    potential_score = serializers.FloatField(read_only=True, required=False)
+
     class Meta:
         model = Listing
         fields = [
@@ -134,6 +138,8 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
             'total_video_count',
             'created_date',
             'is_in_wishlist',
+            'distance_km',
+            'potential_score',
         ]
 
     def get_public_id(self, obj: Listing) -> str:
@@ -224,6 +230,16 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
             return obj.wishlisted_by.filter(user=request.user).exists()
 
         return False
+
+    def get_distance_km(self, obj: Listing) -> float | None:
+        """
+        Lấy khoảng cách đã được tính toán từ annotation trong queryset.
+        """
+        # 'distance' là tên trường chúng ta sẽ tạo bằng .annotate() trong view
+        if hasattr(obj, 'distance'):
+            # obj.distance là một đối tượng Distance của GeoDjango, có thuộc tính .km
+            return round(obj.distance_km, 2)
+        return None
 
 class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """
@@ -349,14 +365,21 @@ class ListingCreateSerializer(serializers.ModelSerializer):
     promotion_code = serializers.CharField(required=False, write_only=True, allow_blank=True)
 
     # --- Trường để liên kết với Property đã có ---
-    property_id = serializers.PrimaryKeyRelatedField(
-        queryset=Property.objects.all(), write_only=True, required=False  # Không bắt buộc
+    # property_id = serializers.PrimaryKeyRelatedField(
+    #     queryset=Property.objects.all(), write_only=True, required=False  # Không bắt buộc
+    # )
+    #
+    # listing_type = serializers.SlugRelatedField(
+    #     slug_field='code',
+    #     queryset=ListingType.objects.all()
+    # )
+
+    listing_category_id = serializers.PrimaryKeyRelatedField(
+        queryset=ListingCategory.objects.all(),
+        write_only=True,
+        source='category_temp'  # Lưu tạm vào một key không có trong model
     )
 
-    listing_type = serializers.SlugRelatedField(
-        slug_field='code',
-        queryset=ListingType.objects.all()
-    )
     unit_price = serializers.SlugRelatedField(
         slug_field='code',
         queryset=UnitPrice.objects.all()
@@ -374,7 +397,8 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         model = Listing
         # Chỉ bao gồm các trường cần thiết để TẠO MỚI
         fields = [
-            "listing_type",
+            "listing_category_id",
+            # "listing_type",
             "title",
             "content",
             "price_value",
@@ -394,6 +418,13 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         # DRF đã tự động chuyển đổi các 'code' thành các object model đầy đủ
         # nên chúng ta không cần thay đổi gì nhiều ở đây.
         # Tuy nhiên, cần gọi service để xử lý logic tạo.
+        category = validated_data.pop('category_temp')
+
+        validated_data['listing_type'] = category.listing_type
+
+        if 'property' in validated_data and validated_data['property']:
+            validated_data['property']['property_type'] = category.property_type
+
         return listings_services.create_full_listing(
             user=self.context['request'].user,
             validated_data=validated_data

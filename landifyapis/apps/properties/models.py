@@ -9,7 +9,7 @@ from apps.users.models import User
 import cloudinary
 
 class PropertyType(BaseModel):
-    """Loại bất động sản (VD: Căn hộ, Nhà phố, Đất nền)"""
+    """Loại bất động sản (VD: Căn hộ chung cư; Nhà riêng; Nhà biệt thự; Nhà mặt phố; Nhà trọ, phòng trọ  )"""
 
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=50, unique=True, blank=True, null=True, verbose_name="Mã code")
@@ -58,33 +58,6 @@ class Location(BaseModel):
     class Meta:
         verbose_name = "Địa điểm"
         verbose_name_plural = "Các Địa điểm"
-
-
-# class Utility(BaseModel):
-#     """Tiện ích (VD: Hồ bơi, Phòng gym, Gần trường học)"""
-#     class UtilityType(models.TextChoices):
-#         INTERIOR = "INTERIOR", "Nội thất"
-#         AMENITY = "AMENITY", "Tiện nghi trong nhà/dự án"
-#         NEARBY = "NEARBY", "Tiện ích lân cận"
-#         OTHER = "OTHER", "Khác"
-#
-#     name = models.CharField(max_length=100, unique=True)
-#     code = models.CharField(max_length=50, unique=True, null=True, blank=True,
-#                             help_text="Mã định danh không đổi cho frontend, ví dụ: FULL_INTERIOR")
-#     utility_type = models.CharField(
-#         max_length=20,
-#         choices=UtilityType.choices,
-#         default=UtilityType.AMENITY,  # Giữ nguyên default hoặc đổi thành OTHER nếu muốn
-#         verbose_name="Loại tiện ích"
-#     )
-#
-#     def __str__(self):
-#         return f"{self.name} ({self.get_utility_type_display()})"
-#
-#     class Meta:
-#         verbose_name = "Tiện ích"
-#         verbose_name_plural = "Các Tiện ích"
-
 
 class LegalStatus(BaseModel):
     """

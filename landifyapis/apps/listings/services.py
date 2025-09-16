@@ -7,15 +7,25 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 
 from . import models, serializers
-from apps.common.tasks import listings as listing_tasks
 from apps.common.services import BusinessLogicError, ProtestResolutionError
 from apps.properties import models as property_models # Import toàn bộ app properties
 from . import models as listing_models # Import app listings (đổi tên để tránh nhầm lẫn)
 
+from apps.common.tasks import listings as listing_tasks
+from apps.users.tasks import notifications as user_notification_tasks
+
 import logging
 
-from .models import PromotionRule, UserPromotion
+from .models import PromotionRule, UserPromotion, Listing, ListingPropertyFeatureValue
 from ..properties.models import PropertyFeature
+
+from django.db.models import F, Count, Case, When, Value, Exists, OuterRef, Subquery, Q, IntegerField
+from django.db.models.functions import Coalesce
+from django.contrib.gis.geos import Point
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.measure import D
+from .models import ListingVip
+from apps.properties.models import PropertyMedia
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +34,7 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
     Tạo một tin đăng hoàn chỉnh, bao gồm cả việc tạo mới Property nếu cần.
     Hàm này được gọi bởi ListingCreateSerializer.
     """
-
+    listing_type = validated_data.pop('listing_type')
     # 1. Tách các dữ liệu lồng nhau ra khỏi validated_data
     property_id = validated_data.pop("property_id", None)
     property_data = validated_data.pop("property", None)
@@ -47,6 +57,7 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
 
         # Kịch bản 2: Người dùng cung cấp dữ liệu để tạo BĐS mới
         elif property_data:
+            property_type_obj = property_data.pop("property_type")
             # Tách dữ liệu location lồng nhau ra
             location_data = property_data.pop("location")
 
@@ -57,6 +68,7 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
             property_obj = property_models.Property.objects.create(
                 owner=user,
                 location=location_obj,
+                property_type=property_type_obj,
                 **property_data
             )
 
@@ -67,7 +79,7 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
 
         # 3. Tạo đối tượng Listing chính
         #    `validated_data` lúc này chỉ còn chứa các trường của Listing (title, content...)
-        listing = listing_models.Listing.objects.create(user=user, property=property_obj, **validated_data)
+        listing = listing_models.Listing.objects.create(user=user, property=property_obj, listing_type=listing_type, **validated_data)
 
         if vip_package_data:
             # Gọi một hàm helper mới để xử lý logic VIP
@@ -125,6 +137,11 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
             listing_models.ProjectDetail.objects.create(listing=listing, **project_detail_data)
 
     listing_tasks.check_listing_for_spam.delay(listing.id)
+
+    user_notification_tasks.notify_followers_of_new_listing.delay(
+        owner_id=user.id,
+        listing_id=listing.id
+    )
 
     return listing
 
@@ -239,3 +256,105 @@ def update_listing_features(*, listing: models.Listing, features_data: List[Dict
                 models.ListingPropertyFeatureValue.objects.update_or_create(
                     listing=listing, feature=feature, defaults={"value": validated_value}
                 )
+
+def find_potential_listings(*, latitude: float, longitude: float, radius_km: int = 20):
+    """
+    Tìm và chấm điểm các tin đăng tiềm năng dựa trên nhiều yếu tố.
+    Trả về một queryset đã được sắp xếp theo điểm từ cao đến thấp.
+    """
+    # --- CÁC TRỌNG SỐ CHO VIỆC TÍNH ĐIỂM ---
+    # Bạn có thể điều chỉnh các trọng số này để thay đổi độ ưu tiên
+    WEIGHT_DISTANCE = -10       # Điểm âm vì khoảng cách càng nhỏ càng tốt
+    WEIGHT_VIP = 1.5          # Nhân với độ ưu tiên của gói VIP
+    WEIGHT_FEATURES = 5       # Điểm cho mỗi feature được điền
+    WEIGHT_DETAIL_FIELDS = 8  # Điểm cho mỗi trường detail được điền
+    POINTS_MANY_IMAGES = 30   # Điểm cộng nếu có > 3 ảnh
+    POINTS_HAS_VIDEO = 40     # Điểm cộng nếu có video
+    POINTS_HAS_LEGAL = 10     # Điểm cộng nếu có thông tin pháp lý
+
+    # 1. Tạo Point từ tọa độ người dùng
+    user_location = Point(longitude, latitude, srid=4326)
+
+    # 2. Xây dựng các Subquery và Annotation cơ bản
+    # Lấy độ ưu tiên của gói VIP (mặc định là 0 nếu không có)
+    vip_priority_subquery = ListingVip.objects.filter(
+        listing=OuterRef('pk'), is_active=True
+    ).values('vip_type__sort_priority')[:1]
+
+    # Đếm số lượng ảnh
+    image_count_subquery = PropertyMedia.objects.filter(
+        property=OuterRef('property_id')
+        # TODO: Cần có trường để phân biệt ảnh và video
+    ).values('property').annotate(c=Count('id')).values('c')
+
+    # Kiểm tra sự tồn tại của video (giả định dựa trên tên file)
+    # Gợi ý: Nên thêm trường 'media_type' vào model PropertyMedia để tối ưu
+    has_video_subquery = PropertyMedia.objects.filter(
+        property=OuterRef('property_id'),
+        url__iregex=r'\.(mp4|mov|avi)$' # Kiểm tra đuôi file
+    )
+
+    feature_count_subquery = ListingPropertyFeatureValue.objects.filter(
+        listing=OuterRef('pk')
+    ).values('listing').annotate(c=Count('id')).values('c')
+
+    # 3. Xây dựng câu truy vấn chính
+    queryset = (
+        Listing.objects.filter(
+            active=True,
+            status=Listing.Status.AVAILABLE,
+            # Lọc sơ bộ trong một bán kính lớn để tối ưu
+            property__location__point__distance_lte=(user_location, D(km=radius_km))
+        )
+        .annotate(
+            # Tính toán các giá trị cơ sở
+            distance_km=Distance('property__location__point', user_location) / 1000,
+            vip_priority=Coalesce(Subquery(vip_priority_subquery), 0),
+            image_count=Coalesce(Subquery(image_count_subquery), 0),
+            has_video=Exists(has_video_subquery),
+            feature_count=Coalesce(Subquery(feature_count_subquery), 0),
+            has_legal_status=Case(When(property__legal_status__isnull=False, then=Value(True)), default=Value(False)),
+
+            has_details=Exists(Listing.objects.filter(
+                Q(pk=OuterRef('pk')) & (Q(buysell_detail__isnull=False) | Q(rental_detail__isnull=False))
+            )),
+
+            # Sử dụng Case/When để cộng 1 cho mỗi trường có giá trị
+            detail_fields_count=Case(
+                When(listing_type__code='BUY_SELL', then=(
+                        Case(When(buysell_detail__condition_status__isnull=False, then=1), default=0,
+                             output_field=IntegerField()) +
+                        Case(When(buysell_detail__is_mortgaged__isnull=False, then=1), default=0,
+                             output_field=IntegerField())
+                )),
+                # --- Nhánh cho tin Cho Thuê ---
+                When(listing_type__code='RENT', then=(
+                        Case(When(rental_detail__deposit_amount__isnull=False, then=1), default=0,
+                             output_field=IntegerField()) +
+                        Case(When(rental_detail__min_lease_duration__isnull=False, then=1), default=0,
+                             output_field=IntegerField()) +
+                        Case(When(rental_detail__allow_pets__isnull=False, then=1), default=0,
+                             output_field=IntegerField()) +
+                        Case(When(rental_detail__max_occupants__isnull=False, then=1), default=0,
+                             output_field=IntegerField())
+                    # Thêm các trường khác của RentalDetail ở đây nếu có
+                )),
+                default=Value(0),
+                output_field=IntegerField()
+            ),
+
+            # Tính toán điểm tiềm năng cuối cùng
+            potential_score= (
+                F('distance_km') * Value(WEIGHT_DISTANCE) +
+                F('vip_priority') * Value(WEIGHT_VIP) +
+                F('feature_count') * Value(WEIGHT_FEATURES) +
+                F('detail_fields_count') * Value(WEIGHT_DETAIL_FIELDS) +
+                Case(When(image_count__gt=3, then=Value(POINTS_MANY_IMAGES)), default=Value(0)) +
+                Case(When(has_video=True, then=Value(POINTS_HAS_VIDEO)), default=Value(0)) +
+                Case(When(has_legal_status=True, then=Value(POINTS_HAS_LEGAL)), default=Value(0))
+            )
+        )
+        .order_by('-potential_score') # Sắp xếp theo điểm từ cao đến thấp
+    )
+
+    return queryset

@@ -12,6 +12,9 @@ from .serializers import ReviewSerializer
 from apps.common.tasks import notifications
 from apps.common.services import BusinessLogicError
 
+from django.contrib.gis.geos import Point
+from django.contrib.gis.measure import Distance
+
 def create_appointment(
     *, user: User, listing: Listing, appointment_date: datetime, note: str
 ) -> Appointment:
@@ -86,9 +89,30 @@ def update_appointment_status(
     return appointment
 
 def rate_property_and_update_score(
-    *, user: User, prop: Property, serializer: ReviewSerializer
+    *, user: User, prop: Property, serializer: ReviewSerializer,
+    user_latitude: float, user_longitude: float
 ) -> Review:
-    """Tạo một đánh giá và cập nhật điểm trung bình cho chủ sở hữu bất động sản."""
+    """Tạo một đánh giá và cập nhật điểm trung bình, sau khi đã xác minh vị trí."""
+    # 1. Kiểm tra xem bất động sản có tọa độ không
+    if not prop.location or not prop.location.point:
+        # Nếu BĐS không có tọa độ, chúng ta không thể xác minh.
+        # Tùy vào yêu cầu, bạn có thể cho qua hoặc chặn lại. Ở đây, chúng ta sẽ chặn.
+        raise BusinessLogicError("Không thể xác minh vị trí do bất động sản này chưa được ghim trên bản đồ.")
+
+    # 2. Tạo đối tượng Point từ tọa độ của người dùng
+    user_location = Point(user_longitude, user_latitude, srid=4326)
+
+    # 3. Lấy tọa độ của bất động sản
+    property_location = prop.location.point
+
+    # 4. Tính khoảng cách
+    distance_from_property = property_location.distance(user_location) * 100 # GeoDjango trả về độ, nhân ~100 để ra km
+
+    # 5. So sánh với ngưỡng 5km
+    if distance_from_property > 5:  # distance_from_property.km > 5
+        raise BusinessLogicError(
+            f"Bạn phải ở trong bán kính 5km của bất động sản để có thể gửi đánh giá. Khoảng cách hiện tại của bạn là {distance_from_property:.2f} km.")
+
     with transaction.atomic():
         review = serializer.save(user=user, property=prop)
 

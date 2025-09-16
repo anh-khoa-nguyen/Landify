@@ -15,6 +15,5 @@ urlpatterns = [
     #path('promotions/', views.UserPromotionListView.as_view(), name='user-promotion-list'),
     path('listings/filter-options/', views.ListingFilterOptionsView.as_view(), name='listing-filter-options'),
     path('', include(router.urls)),
-
     path('', include(listings_router.urls)),
 ]

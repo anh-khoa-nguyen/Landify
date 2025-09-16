@@ -1,7 +1,7 @@
-from . import listings, moderation, notifications
+from . import listings, notifications, stats
 
 __all__ = [
     "listings",
-    "moderation",
     "notifications",
+    "stats",
 ]
