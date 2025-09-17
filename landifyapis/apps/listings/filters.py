@@ -4,26 +4,27 @@ from django.db.models import Q
 from functools import partial
 
 from .models import Listing
+from ..properties.models import Direction
 
-def filter_by_feature_exact(queryset, name, value, feature_code):
-    processed_value = float(value)
 
-    return queryset.filter(
-        feature_values__feature__code=feature_code,
-        feature_values__value__exact=processed_value
-    ).distinct()
+def filter_by_feature(queryset, name, value, feature_code, lookup_expr='exact'):
+    """
+    Lọc các tin đăng dựa trên feature, có khả năng xử lý các kiểu dữ liệu khác nhau.
+    """
+    processed_value = value
 
-def filter_by_feature_range(queryset, name, value, feature_code, lookup_expr):
-    """Lọc các tin đăng có feature với giá trị trong một khoảng (gte, lte)."""
-    # Chuyển đổi giá trị sang float để so sánh số
-    try:
-        numeric_value = float(value)
-    except (ValueError, TypeError):
-        return queryset.none() # Trả về rỗng nếu giá trị không phải là số
+    # Xử lý thông minh: chỉ chuyển đổi sang float nếu giá trị không phải là boolean.
+    # Điều này giữ nguyên giá trị True/False cho các BooleanFilter.
+    if not isinstance(value, bool):
+        try:
+            processed_value = float(value)
+        except (ValueError, TypeError):
+            # Nếu không phải số, giữ nguyên giá trị (dành cho các filter text trong tương lai)
+            pass
 
     filter_kwargs = {
-        f'feature_values__feature__code': feature_code,
-        f'feature_values__value__{lookup_expr}': numeric_value
+        'feature_values__feature__code': feature_code,
+        f'feature_values__value__{lookup_expr}': processed_value
     }
     return queryset.filter(**filter_kwargs).distinct()
 
@@ -44,7 +45,7 @@ class ListingFilter(django_filters.FilterSet):
     ward_code = django_filters.CharFilter(field_name='property__location__ward__code')
 
     # 3. Lọc theo loại BĐS (sử dụng code)
-    property_type_code = django_filters.CharFilter(field_name='property__property_type__code')
+    property_type_code = django_filters.CharFilter(method='filter_by_multiple_codes')
 
     # 4. Lọc theo khoảng giá và diện tích
     min_price = django_filters.NumberFilter(field_name="price_value", lookup_expr='gte')
@@ -54,44 +55,40 @@ class ListingFilter(django_filters.FilterSet):
 
     # 5. Lọc theo các đặc điểm (features) - Đây là phần phức tạp nhất
     beds = django_filters.NumberFilter(
-        method=partial(filter_by_feature_exact, feature_code='NUM_BEDROOMS'),
+        method=partial(filter_by_feature, feature_code='NUM_BEDROOMS', lookup_expr='exact'),
         label="Số phòng ngủ"
     )
     baths = django_filters.NumberFilter(
-        method=partial(filter_by_feature_exact, feature_code='NUM_BATHROOMS'),
+        method=partial(filter_by_feature, feature_code='NUM_BATHROOMS', lookup_expr='exact'),
         label="Số phòng tắm"
     )
-
-    direction_code = django_filters.CharFilter(method='filter_by_direction', label="Hướng nhà")
-    amenities = django_filters.CharFilter(method='filter_by_amenities', label="Lọc theo nhiều tiện ích")
-
-    # --- Bộ lọc cho CHO THUÊ (thay thế RentalDetail) ---
     min_deposit = django_filters.NumberFilter(
-        method=partial(filter_by_feature_range, feature_code='DEPOSIT_AMOUNT', lookup_expr='gte'),
+        method=partial(filter_by_feature, feature_code='DEPOSIT_AMOUNT', lookup_expr='gte'),
         label="Tiền cọc tối thiểu"
     )
     max_deposit = django_filters.NumberFilter(
-        method=partial(filter_by_feature_range, feature_code='DEPOSIT_AMOUNT', lookup_expr='lte'),
+        method=partial(filter_by_feature, feature_code='DEPOSIT_AMOUNT', lookup_expr='lte'),
         label="Tiền cọc tối đa"
     )
     min_lease = django_filters.NumberFilter(
-        method=partial(filter_by_feature_range, feature_code='MIN_LEASE_DURATION', lookup_expr='gte'),
+        method=partial(filter_by_feature, feature_code='MIN_LEASE_DURATION', lookup_expr='gte'),
         label="Thời hạn thuê tối thiểu (tháng)"
     )
     allow_pets = django_filters.BooleanFilter(
-        method=partial(filter_by_feature_exact, feature_code='ALLOW_PETS'),
+        method=partial(filter_by_feature, feature_code='ALLOW_PETS', lookup_expr='exact'),
         label="Cho phép thú cưng"
     )
-
-    # --- Bộ lọc cho MUA BÁN (thay thế BuySellDetail) ---
     is_mortgaged = django_filters.BooleanFilter(
-        method=partial(filter_by_feature_exact, feature_code='IS_MORTGAGED'),
+        method=partial(filter_by_feature, feature_code='IS_MORTGAGED', lookup_expr='exact'),
         label="Đang thế chấp"
     )
     condition_status = django_filters.CharFilter(
-        method=partial(filter_by_feature_exact, feature_code='CONDITION_STATUS'),
+        method=partial(filter_by_feature, feature_code='CONDITION_STATUS', lookup_expr='exact'),
         label="Tình trạng nhà"
     )
+
+    direction_code = django_filters.CharFilter(method='filter_by_direction')
+    #amenities = django_filters.CharFilter(method='filter_by_amenities', label="Lọc theo nhiều tiện ích")
 
     class Meta:
         model = Listing
@@ -107,18 +104,26 @@ class ListingFilter(django_filters.FilterSet):
             Q(property__location__ward__parent_code__name__icontains=value)
         ).distinct()
 
+    def filter_by_multiple_codes(self, queryset, name, value):
+        codes = [code.strip() for code in value.split(',') if code.strip()]
+        if not codes:
+            return queryset
+        return queryset.filter(property__property_type__code__in=codes)
+
     def filter_by_direction(self, queryset, name, value):
-        # Lọc các tin đăng có feature 'Hướng nhà' với giá trị là ID của Direction
-        # Giả sử `value` truyền vào là `code` của Direction, ví dụ: 'EAST'
-        from apps.properties.models import Direction
-        try:
-            direction_id = Direction.objects.get(code=value).id
-            return queryset.filter(
-                feature_values__feature__code='BALCONY_DIRECTION',
-                feature_values__value__exact=direction_id
-            ).distinct()
-        except Direction.DoesNotExist:
+        direction_codes = [code.strip() for code in value.split(',') if code.strip()]
+        if not direction_codes:
+            return queryset
+
+        # Lấy ID của các hướng
+        direction_ids = list(Direction.objects.filter(code__in=direction_codes).values_list('id', flat=True))
+        if not direction_ids:
             return queryset.none()
+
+        return queryset.filter(
+            feature_values__feature__code='BALCONY_DIRECTION',  # Hoặc 'DIRECTION' tùy bạn quy ước
+            feature_values__value__in=direction_ids
+        ).distinct()
 
     def filter_by_amenities(self, queryset, name, value):
         """

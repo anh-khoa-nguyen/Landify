@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.properties.models import PropertyType, Direction, LegalStatus, PropertyFeature
 from .models import UnitPrice, VipType, UserPromotion, ListingType, ListingCategory
 from apps.properties.serializers import PropertyFeatureSerializer
-from ..common.frontend_maps import property_type_maps, direction_maps, legal_status_maps
+from ..common.frontend_maps import property_type_maps, direction_maps, legal_status_maps, choices_maps
 
 # ==============================================================================
 # LỰA CHỌN CỐT LÕI (LOẠI HÌNH & DANH MỤC)
@@ -19,6 +19,11 @@ class PropertyTypeOptionSerializer(serializers.ModelSerializer):
     def get_icon_code(self, obj: PropertyType) -> str:
         return property_type_maps.get_property_type_frontend_info(obj.code).get('icon_code')
 
+class UnitPriceOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UnitPrice
+        fields = ['code', 'name']
+
 class ListingCategoryOptionSerializer(serializers.ModelSerializer):
     """
     Serializer để hiển thị các lựa chọn danh mục hợp lệ, đã được nhóm lại.
@@ -27,10 +32,11 @@ class ListingCategoryOptionSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='display_name', read_only=True)
     property_type_code = serializers.CharField(source='property_type.code')
     applicable_features = PropertyFeatureSerializer(many=True, read_only=True)
+    applicable_unit_prices = UnitPriceOptionSerializer(source='listing_type.applicable_unit_prices', many=True, read_only=True)
 
     class Meta:
         model = ListingCategory
-        fields = ['id', 'name', 'property_type_code', 'applicable_features']
+        fields = ['id', 'name', 'property_type_code', 'applicable_features', 'applicable_unit_prices']
 
 class ListingTypeOptionSerializer(serializers.ModelSerializer):
     """
@@ -156,3 +162,22 @@ class UserPromotionOptionSerializer(serializers.ModelSerializer):
             'discount_percentage',
             'applicable_vip_type_codes',
         ]
+
+# ==============================================================================
+#
+# ==============================================================================
+
+class FilterableFeatureSerializer(serializers.ModelSerializer):
+    """
+    Serializer chỉ trả về các thông tin cần thiết cho một feature trong BỘ LỌC.
+    """
+    choices = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PropertyFeature
+        fields = ['name', 'code', 'feature_type', 'choices']
+
+    def get_choices(self, obj: PropertyFeature) -> list | None:
+        if obj.choice_group:
+            return choices_maps.get_feature_choices(obj.choice_group)
+        return None

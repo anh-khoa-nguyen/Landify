@@ -29,18 +29,11 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from firebase_admin import firestore
 
-# @interactions_docs.wishlist_viewset_schema
-# class WishlistViewSet(viewsets.ModelViewSet):
-#     """ViewSet cho danh sách yêu thích của người dùng."""
-#
-#     serializer_class = WishlistSerializer
-#     permission_classes = [permissions.IsAuthenticated]
-#
-#     def get_queryset(self):
-#         return Wishlist.objects.filter(user=self.request.user)
-#
-#     def perform_create(self, serializer):
-#         serializer.save(user=self.request.user)
+# ==============================================================================
+# PRIMARY INTERACTION VIEWSETS
+# ==============================================================================
+# Các ViewSet này quản lý các nghiệp vụ tương tác chính như Đặt lịch,
+# Đánh giá, và Hợp tác môi giới.
 
 @interactions_docs.appointment_viewset_schema
 class AppointmentViewSet(viewsets.ModelViewSet):
@@ -82,7 +75,6 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
         except BusinessLogicError as e:
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
-
 
 @interactions_docs.wishlist_viewset_schema  # Giả định bạn sẽ tạo doc này
 class ReviewViewSet(viewsets.ModelViewSet):
@@ -146,144 +138,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
             user_longitude = user_longitude
         )
         return
-
-#========================================================
-class StartChatView(APIView):
-    """
-    API để bắt đầu hoặc lấy thông tin một cuộc trò chuyện.
-    """
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, format=None):
-        public_id = request.data.get('public_id')
-        if not public_id:
-            return Response({'error': 'public_id là bắt buộc.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            listing = get_object_from_public_id_or_404(
-                Listing.objects.select_related('user'),
-                public_id
-            )
-        except Http404 as e:
-            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
-
-        user1 = request.user
-        user2 = listing.user
-
-        if user1 == user2:
-            return Response({'error': 'Bạn không thể tự chat với chính mình.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        chat_obj, created = get_or_create_private_chat(user1=user1, user2=user2, listing=listing)
-
-        return Response({
-            'chat_id': chat_obj.id,
-        }, status=status.HTTP_200_OK)
-
-class ChatDetailView(generics.RetrieveAPIView):
-    """
-    API View để lấy chi tiết một cuộc trò chuyện.
-    Chỉ những người tham gia trong cuộc trò chuyện mới có quyền xem.
-    """
-    queryset = Chat.objects.prefetch_related(
-        'users__profile', # Lấy tất cả user và profile của họ
-        'listing__property__media' # Lấy tin đăng và các media liên quan
-    ).all()
-    serializer_class = ChatDetailSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    lookup_field = 'id'
-
-    def get_queryset(self):
-        """
-        Ghi đè để đảm bảo người dùng chỉ có thể truy cập
-        vào các cuộc trò chuyện mà họ là thành viên.
-        """
-        return super().get_queryset().filter(users=self.request.user)
-
-class ChatViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet để xem danh sách và chi tiết các cuộc trò chuyện.
-    Chỉ cho phép các hành động đọc (list, retrieve).
-    """
-    serializer_class = ChatDetailSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    lookup_field = 'pk' # Hoặc 'id'
-
-    def get_queryset(self):
-        """
-        Ghi đè để đảm bảo người dùng chỉ có thể truy cập
-        vào các cuộc trò chuyện mà họ là thành viên.
-        """
-        user = self.request.user
-        return user.chats.all().prefetch_related('participants', 'listing').order_by('-last_message_timestamp')
-
-class MessageViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    API View để lấy danh sách tin nhắn cũ của một cuộc trò chuyện.
-    Chỉ cho phép đọc (GET list).
-    """
-    serializer_class = MessageSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        chat_id = self.kwargs.get('chat_pk')
-
-        # Định nghĩa các queryset cho prefetch
-        appointment_queryset = Appointment.objects.all().select_related('listing')
-        cooperation_queryset = Cooperation.objects.all().select_related('listing', 'agent')
-
-        return Message.objects.filter(
-            chat_id=chat_id,
-            chat__participants=self.request.user
-        ).prefetch_related(
-            # Cung cấp querysets cho GenericPrefetch
-            GenericPrefetch(
-                'linked_object',
-                querysets=[
-                    appointment_queryset,
-                    cooperation_queryset,
-                ]
-            )
-        )
-#========================================================
-class SendAppointmentRequestView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, chat_pk=None):
-        appointment_id = request.data.get('appointment_id')
-
-        # 1. Lấy các object cần thiết và kiểm tra quyền
-        chat = get_object_or_404(Chat, pk=chat_pk, participants=request.user)
-        appointment = get_object_or_404(Appointment, pk=appointment_id)
-
-        # 2. Tạo tin nhắn trong DB
-        message = Message.objects.create(
-            chat=chat,
-            sender=request.user,
-            message_type=Message.MessageType.INTERACTIVE_CARD,
-            linked_object=appointment,
-            content=f"Yêu cầu hẹn gặp cho: {appointment.listing.title}"
-        )
-        chat.last_message_timestamp = message.created_date
-        chat.save()
-
-        # 3. Gửi tin nhắn qua WebSocket bằng Channels Layer
-        channel_layer = get_channel_layer()
-
-        serializer_context = {'request': request}
-
-        message_data = MessageSerializer(message).data
-
-        async_to_sync(channel_layer.group_send)(
-            f'chat_{chat_pk}',
-            {
-                'type': 'chat_message',
-                'message': message_data
-            }
-        )
-
-        return Response(message_data, status=status.HTTP_201_CREATED)
-
-
 
 class CooperationViewSet(viewsets.ModelViewSet):
     """
@@ -350,3 +204,125 @@ class CooperationViewSet(viewsets.ModelViewSet):
         # 4. Serialize kết quả và trả về response thành công
         serializer = self.get_serializer(updated_cooperation)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+# ==============================================================================
+# CHAT & MESSAGING SYSTEM VIEWS
+# ==============================================================================
+# Các View và ViewSet này tạo nên toàn bộ API cho hệ thống trò chuyện.
+
+class StartChatView(APIView):
+    """
+    API để bắt đầu hoặc lấy thông tin một cuộc trò chuyện.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, format=None):
+        public_id = request.data.get('public_id')
+        if not public_id:
+            return Response({'error': 'public_id là bắt buộc.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            listing = get_object_from_public_id_or_404(
+                Listing.objects.select_related('user'),
+                public_id
+            )
+        except Http404 as e:
+            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+        user1 = request.user
+        user2 = listing.user
+
+        if user1 == user2:
+            return Response({'error': 'Bạn không thể tự chat với chính mình.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        chat_obj, created = get_or_create_private_chat(user1=user1, user2=user2, listing=listing)
+
+        return Response({
+            'chat_id': chat_obj.id,
+        }, status=status.HTTP_200_OK)
+
+class ChatViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet để xem danh sách và chi tiết các cuộc trò chuyện.
+    Chỉ cho phép các hành động đọc (list, retrieve).
+    """
+    serializer_class = ChatDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'pk' # Hoặc 'id'
+
+    def get_queryset(self):
+        """
+        Ghi đè để đảm bảo người dùng chỉ có thể truy cập
+        vào các cuộc trò chuyện mà họ là thành viên.
+        """
+        user = self.request.user
+        return user.chats.all().prefetch_related('participants', 'listing').order_by('-last_message_timestamp')
+
+class MessageViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API View để lấy danh sách tin nhắn cũ của một cuộc trò chuyện.
+    Chỉ cho phép đọc (GET list).
+    """
+    serializer_class = MessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        chat_id = self.kwargs.get('chat_pk')
+
+        # Định nghĩa các queryset cho prefetch
+        appointment_queryset = Appointment.objects.all().select_related('listing')
+        cooperation_queryset = Cooperation.objects.all().select_related('listing', 'agent')
+
+        return Message.objects.filter(
+            chat_id=chat_id,
+            chat__participants=self.request.user
+        ).prefetch_related(
+            # Cung cấp querysets cho GenericPrefetch
+            GenericPrefetch(
+                'linked_object',
+                querysets=[
+                    appointment_queryset,
+                    cooperation_queryset,
+                ]
+            )
+        )
+
+# --- Interactive Action Views ---
+# Ghi chú: View này xử lý một hành động cụ thể bên trong một cuộc trò chuyện.
+class SendAppointmentRequestView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, chat_pk=None):
+        appointment_id = request.data.get('appointment_id')
+
+        # 1. Lấy các object cần thiết và kiểm tra quyền
+        chat = get_object_or_404(Chat, pk=chat_pk, participants=request.user)
+        appointment = get_object_or_404(Appointment, pk=appointment_id)
+
+        # 2. Tạo tin nhắn trong DB
+        message = Message.objects.create(
+            chat=chat,
+            sender=request.user,
+            message_type=Message.MessageType.INTERACTIVE_CARD,
+            linked_object=appointment,
+            content=f"Yêu cầu hẹn gặp cho: {appointment.listing.title}"
+        )
+        chat.last_message_timestamp = message.created_date
+        chat.save()
+
+        # 3. Gửi tin nhắn qua WebSocket bằng Channels Layer
+        channel_layer = get_channel_layer()
+
+        serializer_context = {'request': request}
+
+        message_data = MessageSerializer(message).data
+
+        async_to_sync(channel_layer.group_send)(
+            f'chat_{chat_pk}',
+            {
+                'type': 'chat_message',
+                'message': message_data
+            }
+        )
+
+        return Response(message_data, status=status.HTTP_201_CREATED)

@@ -9,41 +9,11 @@ from apps.users.models import User
 from .models import Protest, ModerationAction, Report
 from .serializers import ProtestSerializer
 
-
-# === SERVICE MỚI: Thực hiện một hành động xử lý ===
-def take_moderation_action(*, moderator: User, report: Report, action_type: str, reason: str) -> ModerationAction:
-    """
-    Thực hiện một hành động xử lý dựa trên một báo cáo.
-    Hàm này sẽ vô hiệu hóa nội dung và tạo một bản ghi ModerationAction.
-    """
-    target_object = report.reported_object
-    if not hasattr(target_object, 'active'):
-        raise BusinessLogicError("Đối tượng này không thể bị vô hiệu hóa.")
-
-    with transaction.atomic():
-        # 1. Vô hiệu hóa nội dung (ví dụ: gỡ tin đăng)
-        target_object.active = False
-        target_object.save(update_fields=['active'])
-
-        # 2. Cập nhật trạng thái của báo cáo
-        report.status = Report.Status.ACTION_TAKEN
-        report.save(update_fields=['status'])
-
-        # 3. Tạo bản ghi hành động để làm bằng chứng
-        action = ModerationAction.objects.create(
-            report=report,
-            moderator=moderator,
-            action_type=action_type,
-            reason=reason,
-            target_object=target_object
-        )
-
-    # 4. Gửi thông báo cho người dùng bị ảnh hưởng
-    # (Ví dụ: thông báo tin đăng của họ đã bị gỡ)
-    # ... (thêm logic gọi task thông báo ở đây) ...
-
-    return action
-
+# ==============================================================================
+# PROTEST SERVICES (DỊCH VỤ KHÁNG NGHỊ)
+# ==============================================================================
+# Các hàm này xử lý giai đoạn sau của quy trình kiểm duyệt: khi người dùng
+# kháng nghị một hành động và admin đưa ra quyết định cuối cùng.
 
 def create_protest(*, action: ModerationAction, protester: User, reason: str) -> Protest:
     """Tạo một kháng nghị cho một hành động xử lý."""

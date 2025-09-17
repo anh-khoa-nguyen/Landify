@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 
 from .models import Report, Protest, ModerationAction
+from apps.common.tasks import notifications
 
 # ==============================================================================
 # CORE MODERATION ADMINS
@@ -102,6 +103,37 @@ class ProtestAdmin(admin.ModelAdmin):
     readonly_fields = ("created_date", "updated_date")
     raw_id_fields = ("action", "protester", "admin_reviewer")
     list_select_related = ('protester', 'admin_reviewer', 'action__target_content_type')
+
+    def save_model(self, request, obj, form, change):
+        """
+        Ghi đè để gửi thông báo cho người dùng khi trạng thái kháng nghị thay đổi.
+        """
+        # 'change' is True if it's an update, 'status' in form.changed_data checks if that specific field was modified.
+        if change and 'status' in form.changed_data:
+            # Chỉ gửi thông báo khi trạng thái chuyển sang các trạng thái cuối cùng
+            if obj.status in [Protest.Status.RESOLVED, Protest.Status.REJECTED]:
+                user_to_notify = obj.protester
+
+                title = "Kháng nghị của bạn đã được xử lý"
+                content = (
+                    f"Kháng nghị của bạn cho hành động xử lý #{obj.action.id} đã có kết quả: "
+                    f"'{obj.get_status_display()}'. Ghi chú của admin: {obj.resolution_note}"
+                )
+
+                # Tạo đối tượng liên quan để frontend có thể điều hướng
+                related_item = {"type": "protest", "id": obj.id}
+
+                # Gọi Celery task để gửi thông báo dưới nền
+                transaction.on_commit(lambda: notifications.send_notification_to_user.delay(
+                    user_id=user_to_notify.id,
+                    category="protest_resolution",
+                    title=title,
+                    content=content,
+                    related_item=related_item
+                ))
+
+        # Đừng quên gọi phương thức save_model gốc để lưu đối tượng!
+        super().save_model(request, obj, form, change)
 
     def get_readonly_fields(self, request, obj=None):
         """

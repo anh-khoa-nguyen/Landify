@@ -222,7 +222,8 @@ class Listing(BaseModel):
     title = models.CharField(max_length=255, verbose_name="Tiêu đề")
     content = RichTextField(verbose_name="Nội dung")
     price_value = models.DecimalField(
-        max_digits=19, decimal_places=2, null=True, blank=True, verbose_name="Giá trị (số)"
+        max_digits=19, decimal_places=2, null=True, blank=True, verbose_name="Giá trị (số)",
+        db_index=True
     )
     unit_price = models.ForeignKey(
         UnitPrice, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Đơn vị giá"

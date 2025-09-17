@@ -16,6 +16,11 @@ from apps.common.services import BusinessLogicError
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import Distance
 
+# ==============================================================================
+# APPOINTMENT SERVICES (DỊCH VỤ LỊCH HẸN)
+# ==============================================================================
+# Các hàm xử lý logic nghiệp vụ liên quan đến việc tạo và quản lý Lịch hẹn.
+
 def create_appointment(
     *, user: User, listing: Listing, appointment_date: datetime, note: str
 ) -> Appointment:
@@ -89,6 +94,11 @@ def update_appointment_status(
 
     return appointment
 
+# ==============================================================================
+# REVIEW & WISHLIST SERVICES (DỊCH VỤ ĐÁNH GIÁ & YÊU THÍCH)
+# ==============================================================================
+# Các hàm xử lý logic nghiệp vụ cho việc Đánh giá và thêm vào Danh sách yêu thích.
+
 def rate_property_and_update_score(
     *, user: User, prop: Property, serializer: ReviewSerializer,
     user_latitude: float, user_longitude: float
@@ -134,29 +144,38 @@ def rate_property_and_update_score(
 
         return review
 
-#========================================================
+def toggle_wishlist_item(*, user: User, listing: Listing) -> Tuple[str, Wishlist | None]:
+    """
+    Xử lý logic thêm/xóa (toggle) một tin đăng vào danh sách yêu thích của người dùng.
 
-# def get_or_create_chat(*, user1: User, user2: User, listing: Listing) -> tuple[Chat, bool]:
-#     """
-#     Tìm hoặc tạo một cuộc trò chuyện giữa 2 người dùng về một tin đăng.
-#     """
-#     # Tìm chat có đúng 2 người dùng này VÀ cùng listing
-#     chat = Chat.objects.annotate(
-#         user_count=Count('users')
-#     ).filter(
-#         listing=listing,
-#         user_count=2,
-#         users=user1
-#     ).filter(
-#         users=user2
-#     ).first()
-#
-#     if chat:
-#         return chat, False
-#     else:
-#         new_chat = Chat.objects.create(listing=listing)
-#         new_chat.users.add(user1, user2)
-#         return new_chat, True
+    Args:
+        user (User): Người dùng thực hiện hành động.
+        listing (Listing): Tin đăng được thêm/xóa.
+
+    Returns:
+        Một tuple chứa:
+        - Trạng thái ('added' hoặc 'removed').
+        - Đối tượng Wishlist (nếu được thêm) hoặc None (nếu bị xóa).
+    """
+    # get_or_create trả về một tuple (object, created)
+    # created là một boolean: True nếu object vừa được tạo, False nếu nó đã tồn tại.
+    wishlist_item, created = Wishlist.objects.get_or_create(
+        user=user,
+        listing=listing
+    )
+
+    if created:
+        # Nếu vừa được TẠO MỚI (thêm vào)
+        return "added", wishlist_item
+    else:
+        # Nếu đã TỒN TẠI -> XÓA ĐI
+        wishlist_item.delete()
+        return "removed", None
+
+# ==============================================================================
+# CHAT SERVICES (DỊCH VỤ TRÒ CHUYỆN)
+# ==============================================================================
+# Các hàm xử lý việc tạo và truy vấn các Cuộc trò chuyện.
 
 def get_or_create_private_chat(*, user1: User, user2: User, listing: Listing = None) -> tuple[Chat, bool]:
     """
@@ -213,7 +232,6 @@ def get_all_chats_for_user(user: User):
 class CooperationActionError(BusinessLogicError):
     pass
 
-
 def respond_to_cooperation_request(
     *,
     cooperation: Cooperation,
@@ -234,58 +252,38 @@ def respond_to_cooperation_request(
     Returns:
         Cooperation: Đối tượng hợp tác đã được cập nhật.
     """
-    # 1. Kiểm tra quyền: Chỉ chủ tin đăng (owner) mới được phản hồi
-    if cooperation.owner != actor:
-        raise CooperationActionError("Bạn không có quyền phản hồi yêu cầu này.")
+        # 1. Kiểm tra quyền: Chỉ chủ tin đăng (owner) mới được phản hồi
+    with transaction.atomic():
+        if cooperation.owner != actor:
+            raise CooperationActionError("Bạn không có quyền phản hồi yêu cầu này.")
 
-    # 2. Kiểm tra trạng thái: Chỉ có thể xử lý các yêu cầu đang chờ
-    if cooperation.status != Cooperation.Status.PENDING:
-        raise CooperationActionError("Yêu cầu này đã được xử lý trước đó.")
+        # 2. Kiểm tra trạng thái: Chỉ có thể xử lý các yêu cầu đang chờ
+        if cooperation.status != Cooperation.Status.PENDING:
+            raise CooperationActionError("Yêu cầu này đã được xử lý trước đó.")
 
-    # 3. Cập nhật trạng thái dựa trên hành động
-    if action == 'accept':
-        cooperation.status = Cooperation.Status.ACCEPTED
-        cooperation.rejection_reason = None # Xóa lý do từ chối cũ nếu có
-    elif action == 'reject':
-        cooperation.status = Cooperation.Status.REJECTED
-        cooperation.rejection_reason = reason
-    else:
-        raise CooperationActionError("Hành động không hợp lệ. Chỉ chấp nhận 'accept' hoặc 'reject'.")
+        # 3. Cập nhật trạng thái dựa trên hành động
+        if action == 'accept':
+            cooperation.status = Cooperation.Status.ACCEPTED
+            cooperation.rejection_reason = None # Xóa lý do từ chối cũ nếu có
+        elif action == 'reject':
+            cooperation.status = Cooperation.Status.REJECTED
+            cooperation.rejection_reason = reason
+        else:
+            raise CooperationActionError("Hành động không hợp lệ. Chỉ chấp nhận 'accept' hoặc 'reject'.")
 
-    cooperation.save()
+        cooperation.save()
 
-    # 4. (Tác dụng phụ) Gửi thông báo đến người yêu cầu (agent)
-    # TODO: Bạn có thể kích hoạt task gửi thông báo ở đây
-    # title = f"Yêu cầu hợp tác của bạn đã được {cooperation.get_status_display()}"
-    # content = f"Chủ tin '{cooperation.owner.username}' đã {cooperation.get_status_display().lower()} yêu cầu hợp tác cho tin '{cooperation.listing.title}'."
-    # notifications.send_notification_to_user.delay(user_id=cooperation.agent.id, ...)
+        title = f"Yêu cầu hợp tác của bạn đã được {cooperation.get_status_display()}"
+        content = f"Chủ tin '{cooperation.owner.username}' đã {cooperation.get_status_display().lower()} yêu cầu hợp tác cho tin '{cooperation.listing.title}'."
+        related_item = {"type": "cooperation", "id": cooperation.id}
+
+        # Task chỉ được đưa vào hàng đợi SAU KHI cooperation.save() thành công
+        transaction.on_commit(lambda: notifications.send_notification_to_user.delay(
+            user_id=cooperation.agent.id,
+            category="cooperation_update",
+            title=title,
+            content=content,
+            related_item=related_item
+        ))
 
     return cooperation
-
-def toggle_wishlist_item(*, user: User, listing: Listing) -> Tuple[str, Wishlist | None]:
-    """
-    Xử lý logic thêm/xóa (toggle) một tin đăng vào danh sách yêu thích của người dùng.
-
-    Args:
-        user (User): Người dùng thực hiện hành động.
-        listing (Listing): Tin đăng được thêm/xóa.
-
-    Returns:
-        Một tuple chứa:
-        - Trạng thái ('added' hoặc 'removed').
-        - Đối tượng Wishlist (nếu được thêm) hoặc None (nếu bị xóa).
-    """
-    # get_or_create trả về một tuple (object, created)
-    # created là một boolean: True nếu object vừa được tạo, False nếu nó đã tồn tại.
-    wishlist_item, created = Wishlist.objects.get_or_create(
-        user=user,
-        listing=listing
-    )
-
-    if created:
-        # Nếu vừa được TẠO MỚI (thêm vào)
-        return "added", wishlist_item
-    else:
-        # Nếu đã TỒN TẠI -> XÓA ĐI
-        wishlist_item.delete()
-        return "removed", None

@@ -1,9 +1,13 @@
 # apps/properties/serializers.py
 from datetime import date
+from django.contrib.humanize.templatetags.humanize import intcomma
+from apps.common.models import GeoGridStatistic # Đảm bảo import đúng model mới
+from apps.common.utils.geogrid import geogrid_converter # Import converter
 
 from django.utils import timezone
 from rest_framework import serializers
 from vi_address.models import Ward
+from . import constants # Import file constants của bạn
 
 from apps.common.mixins import DynamicFieldsMixin
 from apps.common.frontend_maps import feature_maps
@@ -206,6 +210,7 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
 
     # Lồng danh sách các feature values
     feature_values = ListingPropertyFeatureValueSerializer(many=True, read_only=True)
+    price_analysis = serializers.SerializerMethodField()
 
     class Meta:
         model = Listing
@@ -227,10 +232,79 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "commission_percentage",
             "created_date",
             "feature_values",
+            "price_analysis"
         ]
 
     def get_public_id(self, obj):
         return hashids.encode(obj.id)
+
+    def get_price_analysis(self, obj: Listing) -> dict | None:
+        """
+        Phân tích giá của tin đăng so với giá trung bình trong ô lưới địa lý tương ứng.
+        Dữ liệu trung bình được lấy từ bảng GeoGridStatistic đã được tính toán trước.
+        """
+        # 1. Kiểm tra các điều kiện cần thiết
+        location = obj.property.location
+        if not location or not location.point or not obj.price_value:
+            return None  # Không có tọa độ hoặc giá thì không thể phân tích
+
+        # 2. Chuyển đổi tọa độ của BĐS thành ID của ô lưới
+        cell_id = geogrid_converter.get_cell_id(location.point.y, location.point.x)
+        if not cell_id:
+            return None
+
+        try:
+            # 3. Truy vấn cực nhanh đến bảng thống kê bằng khóa chính (cell_id)
+            stats = GeoGridStatistic.objects.get(pk=cell_id)
+
+            avg_price = None
+            unit_text = ""
+            area_name = "khu vực lân cận"  # Tên chung chung, không còn phụ thuộc Phường/Xã
+
+            # 4. Xác định loại hình để lấy đúng giá trung bình
+            listing_type_code = obj.listing_category.listing_type.code
+
+            # --- Trường hợp CHO THUÊ ---
+            if listing_type_code == 'RENT' and stats.avg_rent_price and stats.rent_listing_count > 1:
+                avg_price = stats.avg_rent_price
+                unit_text = "VND/tháng"
+
+            # --- Trường hợp MUA BÁN (chỉ xét giá /m²) ---
+            elif (listing_type_code == 'BUY_SELL' and
+                  obj.unit_price and obj.unit_price.code == 'PER_M2' and
+                  stats.avg_sell_price_per_m2 and stats.sell_listing_count > 1):
+                avg_price = stats.avg_sell_price_per_m2
+                unit_text = "/m²"
+
+            # Nếu không rơi vào các trường hợp trên, hoặc không có đủ dữ liệu (count <= 1)
+            if avg_price is None:
+                return {"message": "Chưa có đủ dữ liệu để so sánh giá tại khu vực này."}
+
+            # 5. Tính toán chênh lệch và đưa ra nhận định
+            difference = float(obj.price_value) - float(avg_price)
+            percentage = (difference / float(avg_price)) * 100
+
+            assessment = "tương đương"
+            if percentage > 15:
+                assessment = "cao hơn đáng kể"
+            elif percentage > 5:
+                assessment = "cao hơn một chút"
+            elif percentage < -15:
+                assessment = "thấp hơn đáng kể"
+            elif percentage < -5:
+                assessment = "thấp hơn một chút"
+
+            # 6. Định dạng kết quả trả về cho frontend
+            return {
+                "area_name": area_name,
+                "average_price_formatted": f"{intcomma(int(avg_price))} {unit_text}",
+                "difference_percentage": round(percentage, 1),
+                "assessment": assessment,
+                "listing_count": stats.rent_listing_count if listing_type_code == 'RENT' else stats.sell_listing_count,
+            }
+
+        except GeoGridStatistic.DoesNotExist:
+            return {"message": "Chưa có đủ dữ liệu để so sánh giá tại khu vực này."}
 
 # ==============================================================================
 # SERIALIZER GHI DỮ LIỆU (CREATE / UPDATE)
@@ -344,6 +418,64 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Không thể cung cấp đồng thời cả 'property' và 'property_id'.")
 
         return data
+
+    def validate_features(self, features_data):
+        """
+        Thực hiện validation chi tiết cho từng feature được gửi lên.
+        """
+        if not features_data:
+            return features_data
+
+        # 1. Tối ưu hóa: Lấy tất cả các feature codes và objects cần thiết trong 1-2 query
+        feature_codes = [item.get('feature_code') for item in features_data if item.get('feature_code')]
+        features_map = {f.code: f for f in PropertyFeature.objects.filter(code__in=feature_codes)}
+
+        # Helper map để liên kết code của feature với class hằng số tương ứng
+        choice_constants_map = {
+            "CONDITION_STATUS": constants.ConditionStatus,
+            "INTERIOR_STATUS": constants.InteriorStatus,
+        }
+
+        # 2. Lặp qua từng feature người dùng gửi lên để kiểm tra
+        for item in features_data:
+            code = item.get('feature_code')
+            value = item.get('value')
+
+            feature_obj = features_map.get(code)
+
+            # Kiểm tra xem feature code có tồn tại không
+            if not feature_obj:
+                raise serializers.ValidationError(f"Đặc điểm với mã '{code}' không tồn tại.")
+
+            # 3. Kiểm tra giá trị dựa trên feature_type
+            feature_type = feature_obj.feature_type
+
+            if feature_type == PropertyFeature.FeatureType.FLOAT:
+                if not isinstance(value, (int, float)):
+                    raise serializers.ValidationError(f"Đặc điểm '{feature_obj.name}' yêu cầu một giá trị số.")
+
+            elif feature_type == PropertyFeature.FeatureType.BOOLEAN:
+                if not isinstance(value, bool):
+                    raise serializers.ValidationError(f"Đặc điểm '{feature_obj.name}' yêu cầu giá trị true hoặc false.")
+
+            elif feature_type == PropertyFeature.FeatureType.DIRECTION:
+                if not isinstance(value, int) or not Direction.objects.filter(pk=value).exists():
+                    raise serializers.ValidationError(f"Đặc điểm '{feature_obj.name}' yêu cầu một ID Hướng hợp lệ.")
+
+            elif feature_type == PropertyFeature.FeatureType.TEXT:
+                constant_class = choice_constants_map.get(code)
+                if constant_class:
+                    # Lấy tất cả các giá trị hợp lệ từ class hằng số
+                    allowed_values = [getattr(constant_class, attr) for attr in dir(constant_class) if
+                                      not attr.startswith('__')]
+                    if value not in allowed_values:
+                        raise serializers.ValidationError(
+                            f"Giá trị '{value}' không hợp lệ cho đặc điểm '{feature_obj.name}'. "
+                            f"Các giá trị được chấp nhận là: {', '.join(allowed_values)}."
+                        )
+                # Nếu không có trong map, nó là một trường text tự do, không cần validate thêm
+
+        return features_data
 
     def validate_promotion_code(self, code):
         """

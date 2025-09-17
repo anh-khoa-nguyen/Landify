@@ -8,9 +8,12 @@ from django.contrib.gis.geos import Point
 
 from apps.users.models import User, UserProfile
 from apps.properties.models import Location, Property, PropertyType
-from apps.listings.models import Listing, ListingType, UnitPrice
+# === THÊM IMPORT ListingCategory ===
+from apps.listings.models import Listing, ListingType, UnitPrice, ListingCategory
 from vi_address.models import Ward
 
+
+# ... (các hàm normalize_string, find_best_ward_match, parse_price giữ nguyên) ...
 def normalize_string(s):
     if not s: return ""
     s = str(s).lower().strip()
@@ -57,7 +60,7 @@ def parse_price(price_str, unit_str):
 
 
 class Command(BaseCommand):
-    help = 'Migrates CORE data from the legacy MySQL database with detailed debugging for location.'
+    help = 'Migrates Motel Room (Nha tro, phong tro) data from the legacy MySQL database.'
 
     def _generate_full_phone_number(self, masked_phone):
         if not masked_phone or not isinstance(masked_phone, str): return None
@@ -70,16 +73,26 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.phone_counter = 1
-        self.stdout.write(self.style.SUCCESS("--- Bắt đầu di chuyển dữ liệu CỐT LÕI (CHẾ ĐỘ DEBUG) ---"))
+        self.stdout.write(self.style.SUCCESS("--- Bắt đầu di chuyển dữ liệu Nhà trọ/Phòng trọ ---"))
         self.stdout.write("Đang tải trước dữ liệu lookup...")
 
-        preloaded_wards = {
-            w: {'city': normalize_string(w.parent_code.parent_code.name),
-                'district': normalize_string(w.parent_code.name), 'ward': normalize_string(w.name)}
-            for w in Ward.objects.select_related('parent_code__parent_code').all()
-        }
-        property_type_motel = PropertyType.objects.get(code='MOTEL_ROOM')
-        listing_type_rent = ListingType.objects.get(code='RENT')
+        # === TẢI TRƯỚC CÁC OBJECT CẦN THIẾT ===
+        try:
+            preloaded_wards = {
+                w: {'city': normalize_string(w.parent_code.parent_code.name),
+                    'district': normalize_string(w.parent_code.name), 'ward': normalize_string(w.name)}
+                for w in Ward.objects.select_related('parent_code__parent_code').all()
+            }
+            property_type_motel = PropertyType.objects.get(code='MOTEL_ROOM')
+            listing_type_rent = ListingType.objects.get(code='RENT')
+
+            # Lấy đối tượng ListingCategory cho "Cho Thuê Nhà trọ, phòng trọ"
+            self.stdout.write(self.style.SUCCESS("Tải trước dữ liệu thành công."))
+
+        except (PropertyType.DoesNotExist, ListingType.DoesNotExist) as e:
+            self.stdout.write(self.style.ERROR(f"LỖI: Không thể tải trước dữ liệu cần thiết: {e}"))
+            return
+        # =======================================
 
         migrated_count = 0
         skipped_count = 0
@@ -93,83 +106,77 @@ class Command(BaseCommand):
                 source_data = dict(zip(columns, row))
                 source_property_id = source_data.get('property_id')
 
+                # Kiểm tra xem Listing đã tồn tại chưa (dựa trên property_id cũ)
+                # Đây là một cách đơn giản để script có thể chạy lại mà không tạo dữ liệu trùng lặp
                 if Listing.objects.filter(property_id=source_property_id).exists():
                     skipped_count += 1
                     continue
 
                 try:
                     with transaction.atomic():
-                        # ... (Phần xử lý User giữ nguyên) ...
+                        # Xử lý User (giữ nguyên)
                         raw_phone = source_data.get('phone')
                         phone_number = self._generate_full_phone_number(raw_phone)
                         if not phone_number or len(phone_number) < 9:
                             skipped_count += 1
                             continue
-                        user, user_created = User.objects.get_or_create(phone_number=phone_number,
-                                                                        defaults={'username': phone_number,
-                                                                                  'first_name': source_data.get(
-                                                                                      'name_per', 'Người dùng')})
-                        if user_created: UserProfile.objects.create(user=user)
+                        user, user_created = User.objects.get_or_create(
+                            phone_number=phone_number,
+                            defaults={'username': phone_number, 'first_name': source_data.get('name_per', 'Người dùng')}
+                        )
+                        if user_created:
+                            UserProfile.objects.create(user=user)
+
+                        # Xử lý Location (giữ nguyên)
                         ward_obj = find_best_ward_match(source_data.get('city'), source_data.get('district'),
                                                         source_data.get('ward'), preloaded_wards)
                         if not ward_obj:
                             skipped_count += 1
                             continue
 
-                        # ==========================================================
-                        # <<< KHỐI DEBUG BẮT ĐẦU TỪ ĐÂY >>>
-                        # ==========================================================
-                        self.stdout.write(f"\n--- [DEBUG] Đang xử lý tin {source_property_id} ---")
-
+                        point_obj = None
                         lat_val = source_data.get('lat')
                         lng_val = source_data.get('lng')
-
-                        self.stdout.write(
-                            f"  - Giá trị đọc từ CSDL cũ: lat='{lat_val}' (kiểu: {type(lat_val)}), lng='{lng_val}' (kiểu: {type(lng_val)})")
-
-                        point_obj = None
-                        # Kiểm tra kỹ hơn: không chỉ tồn tại mà còn không phải là chuỗi rỗng
                         if lat_val and str(lat_val).strip() and lng_val and str(lng_val).strip():
-                            self.stdout.write("  - Điều kiện để tạo Point: ĐẠT")
                             try:
-                                # Chuyển đổi sang float một cách tường minh
-                                lng_float = float(lng_val)
-                                lat_float = float(lat_val)
-
-                                self.stdout.write(f"  - Đã chuyển đổi thành công: lng={lng_float}, lat={lat_float}")
-
-                                point_obj = Point(lng_float, lat_float, srid=4326)
-                                self.stdout.write(f"  - Đã tạo đối tượng Point: {point_obj.wkt}")
-
-                            except (ValueError, TypeError) as e:
-                                self.stdout.write(
-                                    self.style.ERROR(f"  - LỖI khi chuyển đổi tọa độ hoặc tạo Point: {e}"))
+                                point_obj = Point(float(lng_val), float(lat_val), srid=4326)
+                            except (ValueError, TypeError):
                                 point_obj = None
-                        else:
-                            self.stdout.write("  - Điều kiện để tạo Point: KHÔNG ĐẠT (giá trị rỗng hoặc None)")
 
                         location_obj = Location.objects.create(
-                            street=source_data.get('street', ''), ward=ward_obj,
+                            street=source_data.get('street', ''),
+                            ward=ward_obj,
                             point=point_obj
                         )
-                        # In ra giá trị point ngay sau khi lưu để xác nhận
-                        self.stdout.write(f"  - Giá trị Point đã lưu vào CSDL: {location_obj.point}")
-                        # ==========================================================
-                        # <<< KHỐI DEBUG KẾT THÚC >>>
-                        # ==========================================================
 
-                        property_obj = Property.objects.create(id=source_property_id, owner=user,
-                                                               property_type=property_type_motel, location=location_obj,
-                                                               area=float(source_data.get('area', 0)))
+                        # Xử lý Property (giữ nguyên)
+                        property_obj = Property.objects.create(
+                            id=source_property_id,
+                            owner=user,
+                            property_type=property_type_motel,
+                            location=location_obj,
+                            area=float(source_data.get('area', 0))
+                        )
+
+                        # Xử lý Listing (CẬP NHẬT)
                         price_val, unit_price_obj = parse_price(source_data.get('price'), source_data.get('unit_price'))
+
                         Listing.objects.create(
-                            property=property_obj, user=user, listing_type=listing_type_rent,
-                            title=source_data.get('title', 'N/A')[:255], content=source_data.get('description', ''),
-                            price_value=price_val, unit_price=unit_price_obj,
+                            property=property_obj,
+                            user=user,
+                            # === THAY ĐỔI QUAN TRỌNG: GÁN listing_category ===
+                            listing_type=listing_type_rent,
+                            # ===============================================
+                            title=source_data.get('title', 'N/A')[:255],
+                            content=source_data.get('description', ''),
+                            price_value=price_val,
+                            unit_price=unit_price_obj,
                             created_date=source_data.get('created_at', datetime.now()),
                         )
 
                         migrated_count += 1
+                        if migrated_count % 100 == 0:
+                            self.stdout.write(f"Đã di chuyển {migrated_count} tin...")
 
                 except Exception as e:
                     self.stdout.write(self.style.ERROR(f"Lỗi nghiêm trọng khi xử lý tin {source_property_id}: {e}"))

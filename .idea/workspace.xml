@@ -2,80 +2,31 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="e492f5ba-0cca-457d-b0a9-39fdb8d4d5b1" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/admin.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/frontend_maps/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/frontend_maps/feature_maps.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/base.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/details.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/feature.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/interaction.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/listing.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/moderation.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/property.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/social.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/models/user.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/serializers/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/serializers/accounts.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/serializers/details.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/serializers/interactions.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/serializers/listings.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/serializers/moderation.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/serializers/social.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/serializers/utils.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/services/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/services/accounts.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/services/analysis.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/services/integrations.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/services/interactions.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/services/listings.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/services/verification.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/tasks/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/tasks/listings.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/tasks/moderation.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/tasks/notifications.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/utils/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/utils/cloudinary.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/utils/ekyc.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/utils/firebase.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/utils/otp.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/utils/sms.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/views/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/views/accounts.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/views/interactions.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/views/listings.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/views/moderation.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/views/social.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/views/utilities.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/landifyapis/landifys/views/verification.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/.idea/inspectionProfiles/profiles_settings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/.idea/landifyapis.iml" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/.idea/landifyapis.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifyapis/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifyapis/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifyapis/asgi.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifyapis/asgi.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifyapis/celery.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifyapis/celery.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/landifyapis/landifyapis/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifyapis/settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifyapis/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifyapis/urls.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifyapis/wsgi.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifyapis/wsgi.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/apps.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifys/apps.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/authentication.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifys/authentication.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/func/fengshui.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifys/func/fengshui.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/models.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/perms.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifys/perms.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/serializers.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/tasks.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/landifys/urls.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/utils.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/landifys/views.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/landifyapis/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/landifyapis/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 1
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "anh-khoa-nguyen"
+  }
 }]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/anh-khoa-nguyen/Landify.git",
+    "accountId": "872a3e8e-81f2-468a-8475-4ccd4f074268"
+  }
+}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1
+}</component>
   <component name="ProjectId" id="326n6gkomVcOo9k3pvLPt5lph9y" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -85,6 +36,7 @@
   "keyToString": {
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "develop",
     "ignore.virus.scanning.warn.message": "true",
     "last_opened_file_path": "D:/Backend/Landify"
   }

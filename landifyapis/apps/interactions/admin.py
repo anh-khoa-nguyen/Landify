@@ -1,12 +1,15 @@
 from django.contrib.gis.admin import GISModelAdmin
 from django.contrib.gis.db import models as gis_models
 from django.contrib.gis.forms.widgets import OSMWidget
+from django.db import transaction
 from django.db.models import Count
+from functools import partial
 
 from django.contrib import admin, messages
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
+from apps.common.tasks import notifications
 
 from .models import Review, Wishlist, Appointment, Chat, Message, Cooperation
 
@@ -81,16 +84,58 @@ class AppointmentAdmin(admin.ModelAdmin):
 
     @admin.action(description=_('Xác nhận các lịch hẹn đã chọn'))
     def confirm_appointments(self, request, queryset):
-        updated_count = queryset.filter(status=Appointment.Status.PENDING).update(status=Appointment.Status.CONFIRMED)
-        self.message_user(request, f"Đã xác nhận thành công {updated_count} lịch hẹn.", messages.SUCCESS)
+        appointments_to_confirm = queryset.filter(status=Appointment.Status.PENDING)
+
+        with transaction.atomic():
+            updated_count = appointments_to_confirm.update(status=Appointment.Status.CONFIRMED)
+
+            updated_ids = appointments_to_confirm.values_list('id', flat=True)
+            appointments_for_notif = Appointment.objects.filter(id__in=updated_ids)
+
+            for app in appointments_for_notif:
+                title = "Lịch hẹn của bạn đã được xác nhận"
+                content = f"Lịch hẹn xem tin '{app.listing.title}' vào lúc {app.appointment_date.strftime('%H:%M %d/%m/%Y')} đã được chủ tin đăng xác nhận."
+                related_item = {"type": "appointment", "id": app.id}
+
+                task_with_args = partial(
+                    notifications.send_notification_to_user.delay,
+                    user_id=app.user.id,
+                    category="appointment_update",
+                    title=title,
+                    content=content,
+                    related_item=related_item
+                )
+                transaction.on_commit(task_with_args)
+
+        self.message_user(request, f"Đã xác nhận và gửi thông báo cho {updated_count} lịch hẹn.", messages.SUCCESS)
 
     @admin.action(description=_('Hủy các lịch hẹn đã chọn'))
     def cancel_appointments(self, request, queryset):
-        # Chỉ hủy các lịch hẹn chưa hoàn thành hoặc chưa bị hủy
-        updated_count = queryset.exclude(
-            status__in=[Appointment.Status.COMPLETED, Appointment.Status.CANCELLED]
-        ).update(status=Appointment.Status.CANCELLED)
-        self.message_user(request, f"Đã hủy thành công {updated_count} lịch hẹn.", messages.SUCCESS)
+        appointments_to_cancel = queryset.exclude(
+            status__in=[Appointment.Status.COMPLETED, Appointment.Status.CANCELLED])
+
+        with transaction.atomic():
+            updated_count = appointments_to_cancel.update(status=Appointment.Status.CANCELLED)
+
+            updated_ids = appointments_to_cancel.values_list('id', flat=True)
+            appointments_for_notif = Appointment.objects.filter(id__in=updated_ids)
+
+            for app in appointments_for_notif:
+                title = "Lịch hẹn của bạn đã bị hủy"
+                content = f"Rất tiếc, lịch hẹn xem tin '{app.listing.title}' đã bị hủy bởi quản trị viên."
+                related_item = {"type": "appointment", "id": app.id}
+
+                task_with_args = partial(
+                    notifications.send_notification_to_user.delay,
+                    user_id=app.user.id,
+                    category="appointment_update",
+                    title=title,
+                    content=content,
+                    related_item=related_item
+                )
+                transaction.on_commit(task_with_args)
+
+        self.message_user(request, f"Đã hủy và gửi thông báo cho {updated_count} lịch hẹn.", messages.SUCCESS)
 
     @admin.display(description="Tin đăng", ordering='listing')
     def listing_link(self, obj):

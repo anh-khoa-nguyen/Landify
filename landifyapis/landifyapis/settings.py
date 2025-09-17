@@ -13,6 +13,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'stats.update_total_listings_count', # Tên tác vụ đã đăng ký ở trên
         'schedule': crontab(hour=23, minute=0),      # Chạy vào 23:00 (11h đêm) mỗi ngày
     },
+    'update-area-prices-every-3-hours': {
+        'task': 'prices.update_geogrid_statistics',
+        'schedule': crontab(minute=0, hour='*/3'),
+    },
 }
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -59,6 +63,8 @@ INSTALLED_APPS = [
     "ckeditor_uploader",
     "drf_spectacular",
     "vi_address",
+    "django_celery_beat",
+    "bulk_update_or_create",
     # === MY APPS ===
     'apps.common.apps.CommonConfig',
     'apps.users.apps.UsersConfig',

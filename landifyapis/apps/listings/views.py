@@ -23,6 +23,7 @@ from .models import Property, Listing, VipType, ListingType, UserPromotion, List
 from .filters import ListingFilter
 from . import services as listing_services
 from .serializers import ListingPreviewSerializer, ListingDetailSerializer, ListingCreateSerializer
+from .option_serializers import FilterableFeatureSerializer # Import từ vị trí mới
 
 from apps.moderation.serializers import ProtestSerializer
 from apps.common.utils import hashids
@@ -78,17 +79,15 @@ class ListingViewSet(viewsets.ModelViewSet):
     queryset = (
         Listing.objects.filter(active=True, status=Listing.Status.AVAILABLE)
         .select_related(
-            'user__profile',  # Lấy User và UserProfile liên quan trong 1 query
-            'property__location__ward__parent_code__parent_code',  # Lấy Property, Location, Ward, District, City
+            'user__profile',
+            'property__location__ward__parent_code__parent_code',
             'listing_type',
             'unit_price',
-            'buysell_detail',  # Lấy các detail model (OneToOne)
-            'rental_detail',
-            'project_detail',
+            'vip_status__vip_type',  # Tối ưu cho việc lấy tag VIP
         )
         .prefetch_related(
-            'feature_values__feature',  # Lấy tất cả feature_values và feature liên quan
-            'property__media',  # Lấy tất cả media của property
+            'feature_values__feature',
+            'property__media',
         )
     )
 
@@ -258,28 +257,56 @@ class ListingViewSet(viewsets.ModelViewSet):
 # ==============================================================================
 # Các API View này cung cấp dữ liệu cần thiết cho frontend để xây dựng
 # giao diện người dùng, chẳng hạn như các tùy chọn cho bộ lọc và form tạo tin.
-
 class ListingFilterOptionsView(APIView):
     """
-    Cung cấp các dữ liệu cần thiết để xây dựng giao diện bộ lọc.
+    Cung cấp TOÀN BỘ dữ liệu cần thiết để xây dựng giao diện BỘ LỌC NÂNG CAO.
+    API này sử dụng một trường feature duy nhất (`applicable_features`) cho cả
+    form đăng tin và bộ lọc.
     """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, format=None):
-        # Lấy các thành phố phổ biến
-        cities = City.objects.filter(is_popular=True).order_by('name') # Giả sử có cờ is_popular
-        # Lấy tất cả các loại BĐS
-        property_types = PropertyType.objects.filter(active=True)
+        # 1. Lấy các bộ lọc chung từ CSDL
+        cities = City.objects.filter(is_popular=True).order_by('name')
+        listing_types = ListingType.objects.filter(active=True)
 
+        # 2. Lấy tất cả các category và prefetch các feature liên quan của chúng
+        categories = ListingCategory.objects.filter(active=True).prefetch_related('applicable_features')
+
+        # 3. Xây dựng cấu trúc dữ liệu cho các bộ lọc đặc thù
+        #    Đây là phần logic chính, nhóm các feature theo ID của category
+        specific_filters_by_category = {}
+        for category in categories:
+            # Key là ID của category, value là danh sách các feature đã được serialize
+            serialized_features = FilterableFeatureSerializer(category.applicable_features, many=True).data
+            specific_filters_by_category[category.id] = serialized_features
+
+        # 4. Xây dựng các lựa chọn tĩnh cho khoảng giá
+        price_ranges_rent = [
+            {'min': 0, 'max': 5000000, 'label': 'Dưới 5 triệu'},
+            {'min': 5000000, 'max': 10000000, 'label': '5 - 10 triệu'},
+            {'min': 10000000, 'max': 20000000, 'label': '10 - 20 triệu'},
+            {'min': 20000000, 'max': 0, 'label': 'Trên 20 triệu'},
+        ]
+        price_ranges_sell = [
+            {'min': 0, 'max': 1000000000, 'label': 'Dưới 1 tỷ'},
+            {'min': 1000000000, 'max': 3000000000, 'label': '1 - 3 tỷ'},
+            {'min': 3000000000, 'max': 5000000000, 'label': '3 - 5 tỷ'},
+            {'min': 5000000000, 'max': 0, 'label': 'Trên 5 tỷ'},
+        ]
+
+        # 5. Gom tất cả dữ liệu vào response cuối cùng
         data = {
+            # --- CÁC BỘ LỌC CHUNG ---
             'cities': [{'code': c.code, 'name': c.name} for c in cities],
-            'property_types': [{'code': pt.code, 'name': pt.name} for pt in property_types],
-            'price_ranges': [
-                {'label': 'Dưới 1 tỷ', 'min': 0, 'max': 1000000000},
-                {'label': '1 - 3 tỷ', 'min': 1000000000, 'max': 3000000000},
-                # ... các khoảng giá khác ...
-            ],
-            # ... các lựa chọn khác như hướng nhà, số phòng ngủ ...
+            'listing_types': [{'code': lt.code, 'name': lt.name} for lt in listing_types],
+            'price_ranges': {
+                'RENT': price_ranges_rent,
+                'BUY_SELL': price_ranges_sell,
+            },
+
+            # --- CÁC BỘ LỌC ĐẶC THÙ ---
+            'specific_filters_by_category': specific_filters
         }
         return Response(data)
 
@@ -293,8 +320,8 @@ class ListingCreationOptionsView(APIView):
     def get(self, request, format=None):
         directions = Direction.objects.filter(active=True)
         legal_statuses = LegalStatus.objects.filter(active=True)
-        unit_prices = UnitPrice.objects.all()  # Giả sử UnitPrice không có cờ active
-        property_features = PropertyFeature.objects.filter(active=True).order_by('category', 'name')
+        # unit_prices = UnitPrice.objects.all()  # Giả sử UnitPrice không có cờ active
+        # property_features = PropertyFeature.objects.filter(active=True).order_by('category', 'name')
         vip_types = VipType.objects.filter(active=True).order_by('-sort_priority')
 
         valid_promotions = UserPromotion.objects.filter(
@@ -304,7 +331,10 @@ class ListingCreationOptionsView(APIView):
         )
         categories = ListingCategory.objects.select_related(
             'listing_type', 'property_type'
-        ).prefetch_related('applicable_features')
+        ).prefetch_related(
+            'applicable_features',
+            'listing_type__applicable_unit_prices' # Prefetch cả unit_prices
+        ).filter(active=True)
 
         grouped_categories = {}
         for category in categories:
@@ -324,7 +354,6 @@ class ListingCreationOptionsView(APIView):
             'grouped_categories': list(grouped_categories.values()),
             'directions': DirectionOptionSerializer(directions, many=True).data,
             'legal_statuses': LegalStatusOptionSerializer(legal_statuses, many=True).data,
-            'unit_prices': UnitPriceOptionSerializer(unit_prices, many=True).data,
             'vip_types': VipTypeOptionSerializer(vip_types, many=True).data,
             'promotions': UserPromotionOptionSerializer(valid_promotions, many=True).data,
         }

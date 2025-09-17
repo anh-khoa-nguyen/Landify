@@ -32,6 +32,9 @@ class Report(BaseModel):
     class Meta:
         verbose_name = "Báo cáo"
         verbose_name_plural = "Các Báo cáo"
+        indexes = [
+            models.Index(fields=["reported_item_type", "reported_item_id"]),
+        ]
 
 class ModerationAction(BaseModel):
     """

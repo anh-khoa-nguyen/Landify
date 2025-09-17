@@ -8,6 +8,12 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from apps.users.models import User
 
+# ==============================================================================
+# DIRECT INTERACTION MODELS (TƯƠNG TÁC TRỰC TIẾP)
+# ==============================================================================
+# Các model này đại diện cho các hành động tương tác trực tiếp của người dùng
+# với một tin đăng hoặc bất động sản.
+
 class Appointment(BaseModel):
     """Lịch hẹn xem nhà cho một TIN ĐĂNG cụ thể."""
 
@@ -59,7 +65,69 @@ class Wishlist(BaseModel):
         verbose_name = "Danh sách yêu thích"
         verbose_name_plural = "Các Danh sách yêu thích"
 
-#======================================================================
+# ==============================================================================
+# PROFESSIONAL INTERACTION MODELS (TƯƠNG TÁC NGHIỆP VỤ)
+# ==============================================================================
+# Model này quản lý luồng nghiệp vụ hợp tác giữa các môi giới và chủ tin đăng.
+
+class Cooperation(BaseModel):
+    """
+    Model quản lý một yêu cầu và trạng thái hợp tác môi giới
+    giữa một người dùng (agent) và một tin đăng (listing).
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Đang chờ"
+        ACCEPTED = "ACCEPTED", "Đã chấp nhận"
+        REJECTED = "REJECTED", "Đã từ chối"
+        SOLD = "SOLD", "BĐS đã bán"  # Trạng thái kết thúc khi BĐS được bán bởi người khác
+        CANCELLED = "CANCELLED", "Đã hủy"  # Trạng thái kết thúc khi một trong hai bên hủy hợp tác
+
+    listing = models.ForeignKey(
+        'listings.Listing',
+        on_delete=models.CASCADE,
+        related_name="cooperations",
+        verbose_name="Tin đăng"
+    )
+    # Người yêu cầu hợp tác (môi giới)
+    agent = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="sent_cooperations",
+        verbose_name="Môi giới yêu cầu"
+    )
+    # Chủ tin đăng (người nhận yêu cầu)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="received_cooperations",
+        verbose_name="Chủ tin đăng"
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        verbose_name="Trạng thái"
+    )
+
+    # Ghi chú cho các hành động
+    rejection_reason = models.TextField(blank=True, null=True, verbose_name="Lý do từ chối")
+    cancellation_reason = models.TextField(blank=True, null=True, verbose_name="Lý do hủy")
+
+    class Meta:
+        verbose_name = "Hợp tác môi giới"
+        verbose_name_plural = "Các Hợp tác môi giới"
+        # Đảm bảo một môi giới chỉ có thể gửi một yêu cầu cho một tin đăng
+        unique_together = ('listing', 'agent')
+
+    def __str__(self):
+        return f"Yêu cầu hợp tác từ {self.agent.username} cho tin '{self.listing.title}'"
+
+# ==============================================================================
+# REAL-TIME COMMUNICATION MODELS (GIAO TIẾP THỜI GIAN THỰC)
+# ==============================================================================
+# Các model này tạo nên nền tảng cho hệ thống trò chuyện (chat).
 
 class Chat(BaseModel):
     # Định nghĩa các loại chat có thể có
@@ -110,7 +178,6 @@ class Chat(BaseModel):
             user_names = " & ".join([user.username for user in users])
             return f"Private Chat: {user_names}"
         return f"Chat ID: {self.id}"
-
 
 class Message(BaseModel):
     # === CÁC LOẠI TIN NHẮN CÓ THỂ CÓ ===
@@ -183,61 +250,9 @@ class Message(BaseModel):
         ordering = ['created_date']
         verbose_name = "Tin nhắn"
         verbose_name_plural = "Các Tin nhắn"
+        indexes = [
+            models.Index(fields=["content_type", "object_id"]),
+        ]
 
     def __str__(self):
         return f"Tin nhắn từ {self.sender.username} trong chat {self.chat.id}"
-
-#===============================================================================
-class Cooperation(BaseModel):
-    """
-    Model quản lý một yêu cầu và trạng thái hợp tác môi giới
-    giữa một người dùng (agent) và một tin đăng (listing).
-    """
-
-    class Status(models.TextChoices):
-        PENDING = "PENDING", "Đang chờ"
-        ACCEPTED = "ACCEPTED", "Đã chấp nhận"
-        REJECTED = "REJECTED", "Đã từ chối"
-        SOLD = "SOLD", "BĐS đã bán"  # Trạng thái kết thúc khi BĐS được bán bởi người khác
-        CANCELLED = "CANCELLED", "Đã hủy"  # Trạng thái kết thúc khi một trong hai bên hủy hợp tác
-
-    listing = models.ForeignKey(
-        'listings.Listing',
-        on_delete=models.CASCADE,
-        related_name="cooperations",
-        verbose_name="Tin đăng"
-    )
-    # Người yêu cầu hợp tác (môi giới)
-    agent = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="sent_cooperations",
-        verbose_name="Môi giới yêu cầu"
-    )
-    # Chủ tin đăng (người nhận yêu cầu)
-    owner = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="received_cooperations",
-        verbose_name="Chủ tin đăng"
-    )
-
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.PENDING,
-        verbose_name="Trạng thái"
-    )
-
-    # Ghi chú cho các hành động
-    rejection_reason = models.TextField(blank=True, null=True, verbose_name="Lý do từ chối")
-    cancellation_reason = models.TextField(blank=True, null=True, verbose_name="Lý do hủy")
-
-    class Meta:
-        verbose_name = "Hợp tác môi giới"
-        verbose_name_plural = "Các Hợp tác môi giới"
-        # Đảm bảo một môi giới chỉ có thể gửi một yêu cầu cho một tin đăng
-        unique_together = ('listing', 'agent')
-
-    def __str__(self):
-        return f"Yêu cầu hợp tác từ {self.agent.username} cho tin '{self.listing.title}'"

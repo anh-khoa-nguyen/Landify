@@ -157,7 +157,7 @@ class Property(BaseModel):
     )
     location = models.OneToOneField(Location, on_delete=models.SET_NULL, null=True, verbose_name="Địa điểm")
     direction = models.ForeignKey(Direction, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Hướng")
-    area = models.FloatField(verbose_name="Diện tích (m²)")
+    area = models.FloatField(verbose_name="Diện tích (m²)", db_index=True)
     legal_status = models.ForeignKey(
         LegalStatus, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Tình trạng pháp lý"
     )

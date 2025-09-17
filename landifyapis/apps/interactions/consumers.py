@@ -10,7 +10,6 @@ from django.contrib.contenttypes.prefetch import GenericPrefetch
 from .models import Chat, Message, User, Appointment, Cooperation
 from .serializers import MessageSerializer
 
-
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.chat_id = self.scope['url_route']['kwargs']['chat_id']

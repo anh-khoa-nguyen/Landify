@@ -1,8 +1,11 @@
+from functools import partial
+from django.db import transaction
 from django.contrib import admin, messages
 from django.db.models import Count
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
+from apps.common.tasks import notifications
 
 from .models import User, UserProfile, Subscription
 
@@ -74,21 +77,44 @@ class UserAdmin(admin.ModelAdmin):
 
     @admin.action(description=_('Kích hoạt các tài khoản đã chọn'))
     def activate_users(self, request, queryset):
-        queryset.update(is_active=True)
-        self.message_user(request, f"Đã kích hoạt thành công {queryset.count()} tài khoản.", messages.SUCCESS)
+        with transaction.atomic():
+            for user in queryset:
+                task_with_args = partial(
+                    notifications.send_notification_to_user.delay,
+                    user_id=user.id, category="account_status", title="Tài khoản của bạn đã được kích hoạt",
+                    content="Chào mừng bạn quay trở lại! Tài khoản của bạn đã hoạt động bình thường."
+                )
+                transaction.on_commit(task_with_args)
+            queryset.update(is_active=True)
+        self.message_user(request, f"Đã kích hoạt và gửi thông báo cho {queryset.count()} tài khoản.", messages.SUCCESS)
 
     @admin.action(description=_('Vô hiệu hóa các tài khoản đã chọn'))
     def deactivate_users(self, request, queryset):
-        # Ngăn admin tự vô hiệu hóa chính mình hoặc superuser khác
-        queryset = queryset.exclude(pk=request.user.pk).exclude(is_superuser=True)
-        updated_count = queryset.update(is_active=False)
-        self.message_user(request, f"Đã vô hiệu hóa thành công {updated_count} tài khoản.", messages.SUCCESS)
+        queryset_to_update = queryset.exclude(pk=request.user.pk).exclude(is_superuser=True)
+        with transaction.atomic():
+            for user in queryset_to_update:
+                task_with_args = partial(
+                    notifications.send_notification_to_user.delay,
+                    user_id=user.id, category="account_status", title="Tài khoản của bạn đã bị tạm khóa",
+                    content="Tài khoản của bạn đã bị tạm khóa do vi phạm chính sách. Vui lòng liên hệ hỗ trợ để biết thêm chi tiết."
+                )
+                transaction.on_commit(task_with_args)
+            updated_count = queryset_to_update.update(is_active=False)
+        self.message_user(request, f"Đã vô hiệu hóa và gửi thông báo cho {updated_count} tài khoản.", messages.SUCCESS)
 
     @admin.action(description=_('Xác minh danh tính thủ công'))
     def manually_verify_identity(self, request, queryset):
-        updated_count = queryset.update(is_identity_verified=True)
-        self.message_user(request, f"Đã xác minh danh tính thành công cho {updated_count} tài khoản.", messages.SUCCESS)
-
+        with transaction.atomic():
+            for user in queryset:
+                task_with_args = partial(
+                    notifications.send_notification_to_user.delay,
+                    user_id=user.id, category="verification", title="Chúc mừng, bạn đã xác minh danh tính thành công!",
+                    content="Tài khoản của bạn đã được quản trị viên xác minh. Giờ đây bạn có thể sử dụng các tính năng nâng cao."
+                )
+                transaction.on_commit(task_with_args)
+            updated_count = queryset.update(is_identity_verified=True)
+        self.message_user(request, f"Đã xác minh danh tính và gửi thông báo cho {updated_count} tài khoản.",
+                          messages.SUCCESS)
 
 # ==============================================================================
 # SUPPORTING MODEL ADMINS
