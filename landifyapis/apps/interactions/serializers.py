@@ -14,6 +14,11 @@ from apps.users.serializers import UserSerializer
 from apps.listings.models import Property
 from apps.listings.serializers import ListingDetailSerializer, ListingPreviewSerializer
 
+# ==============================================================================
+# SERIALIZER CHO CÁC TƯƠNG TÁC CHÍNH
+# ==============================================================================
+# Các serializer này quản lý các hành động tương tác cốt lõi của người dùng
+# với tin đăng và bất động sản.
 
 class AppointmentSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     user = UserSerializer(read_only=True, fields=("id", "get_full_name"))
@@ -85,11 +90,6 @@ class ReviewSerializer(serializers.ModelSerializer):
         # Các trường này sẽ được cung cấp từ view/service, không phải từ client
         read_only_fields = ['user', 'property']
 
-        # === XÓA BỎ VALIDATOR Ở ĐÂY ===
-        # validators = [
-        #     UniqueTogetherValidator(...)
-        # ]
-
     # === THÊM PHƯƠNG THỨC VALIDATE TÙY CHỈNH ===
     def validate(self, data):
         """
@@ -112,60 +112,13 @@ class WishlistSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = Wishlist
         fields = ["id", "user", "listing", "listing_public_id"]
-        read_only_fields = ["user"]
+        read_only_fields = ["user", "listing"]
 
-    def create(self, validated_data):
-        # Lấy public_id và user từ validated_data
-        public_id = validated_data.pop('listing_public_id')
-        user = self.context['request'].user
+# ==============================================================================
+# SERIALIZER CHO NGHIỆP VỤ HỢP TÁC
+# ==============================================================================
+# Serializer này dành riêng cho luồng nghiệp vụ hợp tác môi giới.
 
-        # Dịch public_id thành ID thật
-        listing_id = decode_public_id(public_id)
-
-        if listing_id is None:
-            raise serializers.ValidationError({"listing_public_id": "ID tin đăng không hợp lệ."})
-
-        # Kiểm tra xem người dùng đã lưu tin này chưa để tránh lỗi DB
-        if Wishlist.objects.filter(user=user, listing_id=listing_id).exists():
-            raise serializers.ValidationError({"detail": "Bạn đã lưu tin đăng này rồi."})
-
-        # Tạo đối tượng Wishlist mới
-        try:
-            wishlist = Wishlist.objects.create(user=user, listing_id=listing_id)
-            return wishlist
-        except Exception as e:
-            # Bắt các lỗi khác có thể xảy ra
-            raise serializers.ValidationError({"detail": f"Không thể lưu tin đăng: {e}"})
-
-#========================================================
-
-class ChatParticipantSerializer(UserSerializer):
-    """Serializer con để chỉ hiển thị thông tin cần thiết của người tham gia."""
-    class Meta(UserSerializer.Meta):
-        fields = ['id', 'get_full_name', 'profile'] # Giả sử UserSerializer có lồng profile
-
-class ChatDetailSerializer(serializers.ModelSerializer):
-    """
-    Serializer để hiển thị thông tin chi tiết của một cuộc trò chuyện.
-    """
-    # Lấy thông tin chi tiết của những người tham gia
-    participants = UserSerializer(many=True, read_only=True)
-
-    # Lấy thông tin xem trước của tin đăng liên quan (nếu có)
-    listing = ListingPreviewSerializer(read_only=True)
-
-    class Meta:
-        model = Chat
-        fields = [
-            'id',
-            'chat_type',
-            'name',
-            'listing',
-            'participants',  # <-- ĐẢM BẢO TRƯỜNG NÀY CÓ TRONG DANH SÁCH
-            'created_date',
-        ]
-
-#========================================================
 class CooperationSerializer(serializers.ModelSerializer):
     """
     Serializer cho model Hợp tác môi giới (Cooperation).
@@ -199,7 +152,15 @@ class CooperationSerializer(serializers.ModelSerializer):
             'rejection_reason',
             'cancellation_reason'
         ]
-#=============================================================
+
+# ==============================================================================
+# SERIALIZER CHO HỆ THỐNG TRÒ CHUYỆN (CHAT)
+# ==============================================================================
+# Bao gồm các serializer để hiển thị chi tiết cuộc trò chuyện, tin nhắn,
+# và các thành phần lồng nhau (thẻ tương tác).
+
+# --- Component Serializers for Interactive Cards ---
+# Ghi chú: Các serializer này dùng để hiển thị dữ liệu lồng nhau bên trong MessageSerializer.
 class LinkedAppointmentSerializer(serializers.ModelSerializer):
     """Serializer chỉ hiển thị thông tin cần thiết của Appointment cho thẻ chat."""
     listing = ListingPreviewSerializer(read_only=True)
@@ -212,7 +173,6 @@ class LinkedAppointmentSerializer(serializers.ModelSerializer):
         context = self.context
         # Khởi tạo ListingPreviewSerializer và truyền context xuống
         return ListingPreviewSerializer(obj.listing, context=context).data
-
 
 class LinkedCooperationSerializer(serializers.ModelSerializer):
     """Serializer chỉ hiển thị thông tin cần thiết của Cooperation cho thẻ chat."""
@@ -263,3 +223,31 @@ class MessageSerializer(serializers.ModelSerializer):
                     "data": LinkedCooperationSerializer(obj.linked_object, context=context).data
                 }
         return None
+
+class ChatDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer để hiển thị thông tin chi tiết của một cuộc trò chuyện.
+    """
+    # Lấy thông tin chi tiết của những người tham gia
+    participants = UserSerializer(many=True, read_only=True)
+
+    # Lấy thông tin xem trước của tin đăng liên quan (nếu có)
+    listing = ListingPreviewSerializer(read_only=True)
+
+    class Meta:
+        model = Chat
+        fields = [
+            'id',
+            'chat_type',
+            'name',
+            'listing',
+            'participants',  # <-- ĐẢM BẢO TRƯỜNG NÀY CÓ TRONG DANH SÁCH
+            'created_date',
+        ]
+
+class ChatParticipantSerializer(UserSerializer):
+    """Serializer con để chỉ hiển thị thông tin cần thiết của người tham gia."""
+    class Meta(UserSerializer.Meta):
+        fields = ['id', 'get_full_name', 'profile'] # Giả sử UserSerializer có lồng profile
+
+

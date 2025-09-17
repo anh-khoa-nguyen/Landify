@@ -28,6 +28,7 @@ from apps.moderation.serializers import ProtestSerializer
 from apps.common.utils import hashids
 from apps.common.services import BusinessLogicError
 from apps.common.utils.hashids import get_object_from_public_id_or_404
+from apps.interactions import services as interactions_services # Import service mới
 
 #---------CREATE LISTING OPTION---------
 from apps.properties.models import PropertyType, Direction, LegalStatus, PropertyFeature
@@ -51,6 +52,12 @@ from ..interactions.serializers import WishlistSerializer
 from django.contrib.gis.geos import Point
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
+
+# ==============================================================================
+# CORE LISTING VIEWSET
+# ==============================================================================
+# ViewSet chính quản lý tất cả các hoạt động CRUD và các action tùy chỉnh
+# liên quan đến Tin đăng (Listing).
 
 @listings_docs.listing_viewset_schema
 class ListingViewSet(viewsets.ModelViewSet):
@@ -110,25 +117,35 @@ class ListingViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """
-        Ghi đè logic tạo mới để có thể sử dụng serializer khác cho response.
-        - Dùng ListingCreateSerializer để validate dữ liệu đầu vào.
-        - Dùng ListingDetailSerializer để serialize dữ liệu đầu ra.
+        Ghi đè logic tạo mới để gọi đến service function.
         """
-        create_serializer = self.get_serializer(data=request.data)
-        create_serializer.is_valid(raise_exception=True)
+        # 1. Khởi tạo serializer để validate dữ liệu đầu vào
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        # 2. Gọi service để thực hiện việc lưu vào database
-        #    Hàm này sẽ trả về instance Listing vừa được tạo.
-        listing_instance = listing_services.create_full_listing(
-            user=request.user,
-            validated_data=create_serializer.validated_data
-        )
+        # 2. Lấy dữ liệu đã được validate
+        validated_data = serializer.validated_data
 
-        # 3. Lấy serializer dùng để ĐỌC (tạo response trả về)
-        #    Chúng ta khởi tạo nó một cách tường minh.
-        response_serializer = ListingDetailSerializer(listing_instance, context=self.get_serializer_context())
+        # 3. Tách các thông tin cần thiết để gọi service
+        # Nhờ PrimaryKeyRelatedField, 'listing_category' giờ là một object đầy đủ
+        category = validated_data.pop('listing_category')
 
-        # 4. Tạo và trả về response 201 Created với dữ liệu đầy đủ
+        # 4. Gọi đến service để thực hiện toàn bộ logic nghiệp vụ phức tạp
+        try:
+            new_listing = listing_services.create_full_listing(
+                user=request.user,
+                listing_type=category.listing_type,
+                property_type=category.property_type,
+                validated_data=validated_data
+            )
+        except BusinessLogicError as e:
+            # Bắt các lỗi nghiệp vụ từ service và trả về lỗi 400
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 5. Serialize kết quả trả về bằng serializer chi tiết
+        response_serializer = ListingDetailSerializer(new_listing, context=self.get_serializer_context())
+
+        # 6. Trả về response thành công
         headers = self.get_success_headers(response_serializer.data)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -165,36 +182,42 @@ class ListingViewSet(viewsets.ModelViewSet):
     #         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(methods=["post"], detail=True, url_path="wishlist")
-    def wishlist(self, request, public_id=None):
+    def wishlist(self, request, pk=None):
         """
         Thêm/Xóa (toggle) tin đăng này vào danh sách yêu thích của người dùng.
         """
         # 1. Lấy đối tượng Listing dựa trên public_id từ URL
-        listing = self.get_object()
+        # Lưu ý: Vì action này nằm trong UserViewSet, chúng ta cần get_object_or_404 cho Listing
+        listing = get_object_from_public_id_or_404(Listing.objects, pk)
         user = request.user
 
-        # 2. Thực hiện logic toggle
+        # 2. Gọi service để xử lý toàn bộ logic nghiệp vụ
         try:
-            wishlist_item, created = Wishlist.objects.get_or_create(
+            status, wishlist_item = interactions_services.toggle_wishlist_item(
                 user=user,
                 listing=listing
             )
 
-            if created:
-                # Nếu vừa được TẠO MỚI (thêm vào)
+            # 3. Trả về response dựa trên kết quả từ service
+            if status == "added":
                 serializer = WishlistSerializer(wishlist_item, context={'request': request})
                 return Response({
                     "status": "added",
                     "message": "Đã thêm vào danh sách yêu thích.",
                     "wishlist_item": serializer.data
                 }, status=status.HTTP_201_CREATED)
-            else:
-                # Nếu đã TỒN TẠI -> XÓA ĐI
-                wishlist_item.delete()
+            else:  # status == "removed"
                 return Response({
                     "status": "removed",
                     "message": "Đã xóa khỏi danh sách yêu thích."
                 }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            # Bắt các lỗi không lường trước
+            return Response(
+                {"error": f"Đã có lỗi xảy ra: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         except Exception as e:
             return Response(
@@ -230,6 +253,12 @@ class ListingViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(potential_listings_qs, many=True, context={'request': request})
         return Response(serializer.data)
 
+# ==============================================================================
+# HELPER & OPTION VIEWS
+# ==============================================================================
+# Các API View này cung cấp dữ liệu cần thiết cho frontend để xây dựng
+# giao diện người dùng, chẳng hạn như các tùy chọn cho bộ lọc và form tạo tin.
+
 class ListingFilterOptionsView(APIView):
     """
     Cung cấp các dữ liệu cần thiết để xây dựng giao diện bộ lọc.
@@ -262,9 +291,6 @@ class ListingCreationOptionsView(APIView):
     permission_classes = [permissions.IsAuthenticated]  # Chỉ người dùng đăng nhập mới được tạo tin
 
     def get(self, request, format=None):
-        # Truy vấn tất cả các lựa chọn từ database
-        # property_types = PropertyType.objects.filter(active=True)
-        # listing_types = ListingType.objects.filter(active=True)
         directions = Direction.objects.filter(active=True)
         legal_statuses = LegalStatus.objects.filter(active=True)
         unit_prices = UnitPrice.objects.all()  # Giả sử UnitPrice không có cờ active
@@ -276,7 +302,9 @@ class ListingCreationOptionsView(APIView):
             status=UserPromotion.Status.AVAILABLE,
             expiry_date__gte=timezone.now()
         )
-        categories = ListingCategory.objects.select_related('listing_type', 'property_type').order_by('listing_type__id', 'id')
+        categories = ListingCategory.objects.select_related(
+            'listing_type', 'property_type'
+        ).prefetch_related('applicable_features')
 
         grouped_categories = {}
         for category in categories:
@@ -293,14 +321,10 @@ class ListingCreationOptionsView(APIView):
 
         # Serialize dữ liệu
         data = {
-            # 'property_types': PropertyTypeOptionSerializer(property_types, many=True).data,
-            # 'listing_types': ListingTypeOptionSerializer(listing_types, many=True).data,
             'grouped_categories': list(grouped_categories.values()),
             'directions': DirectionOptionSerializer(directions, many=True).data,
             'legal_statuses': LegalStatusOptionSerializer(legal_statuses, many=True).data,
             'unit_prices': UnitPriceOptionSerializer(unit_prices, many=True).data,
-            'property_features': PropertyFeatureSerializer(property_features, many=True,
-                                                           context={'request': request}).data,
             'vip_types': VipTypeOptionSerializer(vip_types, many=True).data,
             'promotions': UserPromotionOptionSerializer(valid_promotions, many=True).data,
         }

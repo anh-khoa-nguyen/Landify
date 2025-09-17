@@ -13,9 +13,12 @@ from . import services as property_services
 
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
-# =======================================================================
-# == VIEWSETS
-# =======================================================================
+
+# ==============================================================================
+# PRIMARY PROPERTY VIEWSET
+# ==============================================================================
+# ViewSet chính quản lý các tài nguyên Bất động sản (Property).
+# Đây là endpoint gốc cho các hoạt động CRUD trên Property.
 class PropertyViewSet(viewsets.ModelViewSet):
     """ViewSet để quản lý Bất động sản (thông tin vật lý)."""
 
@@ -24,6 +27,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
         .prefetch_related("utilities")
         .filter(active=True)
     )
+
     serializer_class = PropertySerializer
 
     def get_permissions(self):
@@ -36,6 +40,11 @@ class PropertyViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
+# ==============================================================================
+# NESTED MEDIA VIEWSET
+# ==============================================================================
+# ViewSet lồng nhau để quản lý Media (ảnh/video) của một Property cụ thể.
+# URL: /api/properties/{property_pk}/media/
 @media_docs.media_viewset_schema
 class MediaViewSet(viewsets.ModelViewSet):
     """
@@ -68,7 +77,6 @@ class MediaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Lấy danh sách file từ request. Postman phải dùng key là 'files'
         media_files = request.FILES.getlist('files')
 
         if not media_files:
@@ -85,8 +93,6 @@ class MediaViewSet(viewsets.ModelViewSet):
         except BusinessLogicError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Dùng serializer để tạo response.
-        # Serializer sẽ tự động gọi .url để lấy link đầy đủ
         response_serializer = self.get_serializer(created_media_instances, many=True)
 
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)

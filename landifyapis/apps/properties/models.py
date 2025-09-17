@@ -8,8 +8,16 @@ from apps.common.models import BaseModel
 from apps.users.models import User
 import cloudinary
 
+# ==============================================================================
+# CONFIGURATION & ATTRIBUTE MODELS
+# ==============================================================================
+# Các model này định nghĩa các thuộc tính, loại hình, và đặc điểm có thể có
+# của một Bất động sản. Chúng hoạt động như các bảng cấu hình hoặc tra cứu.
+
 class PropertyType(BaseModel):
-    """Loại bất động sản (VD: Căn hộ chung cư; Nhà riêng; Nhà biệt thự; Nhà mặt phố; Nhà trọ, phòng trọ  )"""
+    """
+    Loại bất động sản (VD: Căn hộ chung cư; Nhà riêng; Nhà biệt thự; Nhà mặt phố; Nhà trọ, phòng trọ  )
+    """
 
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=50, unique=True, blank=True, null=True, verbose_name="Mã code")
@@ -22,7 +30,9 @@ class PropertyType(BaseModel):
         verbose_name_plural = "Các Loại Bất động sản"
 
 class Direction(BaseModel):
-    """Hướng nhà (VD: Đông, Tây, Nam, Bắc)"""
+    """
+    Hướng nhà (VD: Đông, Tây, Nam, Bắc)
+    """
 
     name = models.CharField(max_length=50, unique=True, help_text="Tên hướng, ví dụ: Đông, Tây Nam")
     code = models.CharField(max_length=20, unique=True, null=True, blank=True,
@@ -35,29 +45,6 @@ class Direction(BaseModel):
     class Meta:
         verbose_name = "Hướng"
         verbose_name_plural = "Các Hướng"
-
-
-class Location(BaseModel):
-    """Lưu địa chỉ có cấu trúc của bất động sản"""
-
-    street = models.CharField(max_length=255, verbose_name="Số nhà, Tên đường")
-    ward = models.ForeignKey(Ward, on_delete=models.SET_NULL, null=True, verbose_name="Phường/Xã")
-    point = gis_models.PointField(srid=4326, null=True, blank=True, verbose_name="Tọa độ")
-
-    @property
-    def district(self):
-        return self.ward.parent_code if self.ward else None
-
-    @property
-    def city(self):
-        return self.ward.parent_code.parent_code if self.ward and self.ward.parent_code else None
-
-    def __str__(self):
-        return f"{self.street}, {self.ward}, {self.district}, {self.city}"
-
-    class Meta:
-        verbose_name = "Địa điểm"
-        verbose_name_plural = "Các Địa điểm"
 
 class LegalStatus(BaseModel):
     """
@@ -75,29 +62,6 @@ class LegalStatus(BaseModel):
     class Meta:
         verbose_name = "Tình trạng pháp lý"
         verbose_name_plural = "Các Tình trạng pháp lý"
-
-class Property(BaseModel):
-    """Model Bất động sản - Chỉ chứa các thông tin vật lý, cố định của tài sản."""
-
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="properties", verbose_name="Chủ sở hữu")
-    property_type = models.ForeignKey(
-        PropertyType, on_delete=models.SET_NULL, null=True, verbose_name="Loại hình BĐS (để thống kê)"
-    )
-    location = models.OneToOneField(Location, on_delete=models.SET_NULL, null=True, verbose_name="Địa điểm")
-    direction = models.ForeignKey(Direction, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Hướng")
-    area = models.FloatField(verbose_name="Diện tích (m²)")
-    legal_status = models.ForeignKey(
-        LegalStatus, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Tình trạng pháp lý"
-    )
-    # bedroom_count = models.PositiveIntegerField(null=True, blank=True, verbose_name="Số phòng ngủ")
-    # bathroom_count = models.PositiveIntegerField(null=True, blank=True, verbose_name="Số phòng tắm")
-
-    class Meta:
-        verbose_name = "Bất động sản"
-        verbose_name_plural = "Các Bất động sản"
-
-    def __str__(self):
-        return f"BĐS của {self.owner} tại {self.location}"
 
 class PropertyFeature(BaseModel):
     """
@@ -152,8 +116,63 @@ class PropertyFeature(BaseModel):
         verbose_name = "Đặc điểm Bất động sản"
         verbose_name_plural = "Các Đặc điểm Bất động sản"
 
+# ==============================================================================
+# CORE PROPERTY MODELS
+# ==============================================================================
+# Đây là các model trung tâm, đại diện cho một Bất động sản vật lý
+# và các thành phần không thể tách rời của nó (vị trí, media).
+
+class Location(BaseModel):
+    """
+    Lưu địa chỉ có cấu trúc của bất động sản
+    """
+
+    street = models.CharField(max_length=255, verbose_name="Số nhà, Tên đường")
+    ward = models.ForeignKey(Ward, on_delete=models.SET_NULL, null=True, verbose_name="Phường/Xã")
+    point = gis_models.PointField(srid=4326, null=True, blank=True, verbose_name="Tọa độ")
+
+    @property
+    def district(self):
+        return self.ward.parent_code if self.ward else None
+
+    @property
+    def city(self):
+        return self.ward.parent_code.parent_code if self.ward and self.ward.parent_code else None
+
+    def __str__(self):
+        return f"{self.street}, {self.ward}, {self.district}, {self.city}"
+
+    class Meta:
+        verbose_name = "Địa điểm"
+        verbose_name_plural = "Các Địa điểm"
+
+class Property(BaseModel):
+    """
+    Model Bất động sản - Chỉ chứa các thông tin vật lý, cố định của tài sản.
+    """
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="properties", verbose_name="Chủ sở hữu")
+    property_type = models.ForeignKey(
+        PropertyType, on_delete=models.SET_NULL, null=True, verbose_name="Loại hình BĐS (để thống kê)"
+    )
+    location = models.OneToOneField(Location, on_delete=models.SET_NULL, null=True, verbose_name="Địa điểm")
+    direction = models.ForeignKey(Direction, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Hướng")
+    area = models.FloatField(verbose_name="Diện tích (m²)")
+    legal_status = models.ForeignKey(
+        LegalStatus, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Tình trạng pháp lý"
+    )
+
+    class Meta:
+        verbose_name = "Bất động sản"
+        verbose_name_plural = "Các Bất động sản"
+
+    def __str__(self):
+        return f"BĐS của {self.owner} tại {self.location}"
+
 class PropertyMedia(BaseModel):
-    """Lưu trữ ảnh/video cho bất động sản"""
+    """
+    Lưu trữ ảnh/video cho bất động sản
+    """
 
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="media", verbose_name="Bất động sản")
     url = CloudinaryField("media", resource_type="auto")

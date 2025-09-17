@@ -7,29 +7,14 @@ from apps.users.serializers import UserSerializer
 from .models import Location, PropertyFeature, PropertyMedia, Property, PropertyType, Direction
 
 from . import services as property_services
-from apps.common.frontend_maps import feature_maps
+from apps.common.frontend_maps import feature_maps, choices_maps
 from ..common.services import BusinessLogicError
 
-
 # ==============================================================================
-# FEATURE & PROPERTY SERIALIZERS
+# COMPONENT & NESTED SERIALIZERS
 # ==============================================================================
-
-class LocationSerializer(serializers.ModelSerializer):
-    ward_name = serializers.CharField(source="ward.name", read_only=True)
-    district_name = serializers.CharField(source="district.name", read_only=True)
-    city_name = serializers.CharField(source="city.name", read_only=True)
-
-    ward = serializers.PrimaryKeyRelatedField(
-        queryset=Ward.objects.all(), write_only=True, required=True
-    )
-
-    class Meta:
-        model = Location
-        fields = [
-            "id", "street", "point", "ward", "ward_name",
-            "district_name", "city_name",
-        ]
+# Các serializer này là những thành phần xây dựng nên PropertySerializer chính.
+# Chúng đại diện cho các model liên quan như Feature, Location, và Media.
 
 class PropertyFeatureSerializer(serializers.ModelSerializer):
     """
@@ -39,10 +24,11 @@ class PropertyFeatureSerializer(serializers.ModelSerializer):
 
     icon_code = serializers.SerializerMethodField()
     unit = serializers.SerializerMethodField()
+    choices = serializers.SerializerMethodField()
 
     class Meta:
         model = PropertyFeature
-        fields = ["id", "name", "code", "category", "feature_type", "icon_code", "unit",]
+        fields = ["id", "name", "code", "category", "feature_type", "icon_code", "unit", "choices"]
 
     def get_frontend_info(self, obj: PropertyFeature) -> dict:
         """Hàm helper để tra cứu thông tin frontend và cache kết quả."""
@@ -66,11 +52,32 @@ class PropertyFeatureSerializer(serializers.ModelSerializer):
     def get_unit(self, obj: PropertyFeature) -> str | None:
         return self.get_frontend_info(obj).get("unit")
 
+    def get_choices(self, obj: PropertyFeature) -> list | None:
+        if obj.feature_type == 'TEXT':
+             return choices_maps.get_feature_choices(obj.code)
+        return None
+
+class LocationSerializer(serializers.ModelSerializer):
+    ward_name = serializers.CharField(source="ward.name", read_only=True)
+    district_name = serializers.CharField(source="district.name", read_only=True)
+    city_name = serializers.CharField(source="city.name", read_only=True)
+
+    ward = serializers.PrimaryKeyRelatedField(
+        queryset=Ward.objects.all(), write_only=True, required=True
+    )
+
+    class Meta:
+        model = Location
+        fields = [
+            "id", "street", "point", "ward", "ward_name",
+            "district_name", "city_name",
+        ]
+
 class PropertyMediaSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model PropertyMedia."""
+
     file = serializers.FileField(write_only=True, required=False)
 
-    # Thêm một trường files để nhận nhiều file
     files = serializers.ListField(
         child=serializers.FileField(),
         write_only=True,
@@ -88,9 +95,15 @@ class PropertyMediaSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         fields = ['id', 'url', 'public_id', 'property', 'file', 'files']
         read_only_fields = ["id", "url", "public_id", "property"]
 
+# ==============================================================================
+# CORE PROPERTY SERIALIZER
+# ==============================================================================
+# Serializer chính cho model Property, được sử dụng trong PropertyViewSet.
+# Nó lồng các component serializer ở trên để có một cấu trúc dữ liệu hoàn chỉnh.
+
 class PropertySerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Property, xử lý việc tạo/cập nhật Location lồng nhau."""
-    # CÁC TRƯỜNG CHỈ ĐỌC (READ-ONLY)
+
     owner = UserSerializer(read_only=True, fields=("id", "get_full_name"))
     location = LocationSerializer()
     property_type_name = serializers.CharField(source="property_type.name", read_only=True)
@@ -131,5 +144,4 @@ class PropertySerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             location_serializer.is_valid(raise_exception=True)
             location_serializer.save()
 
-        # DRF sẽ tự động xử lý việc cập nhật các trường còn lại (property_type, direction...)
         return super().update(instance, validated_data)

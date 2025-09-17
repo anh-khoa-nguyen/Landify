@@ -5,6 +5,9 @@ from .models import UnitPrice, VipType, UserPromotion, ListingType, ListingCateg
 from apps.properties.serializers import PropertyFeatureSerializer
 from ..common.frontend_maps import property_type_maps, direction_maps, legal_status_maps
 
+# ==============================================================================
+# LỰA CHỌN CỐT LÕI (LOẠI HÌNH & DANH MỤC)
+# ==============================================================================
 
 class PropertyTypeOptionSerializer(serializers.ModelSerializer):
     icon_code = serializers.SerializerMethodField()
@@ -23,11 +26,11 @@ class ListingCategoryOptionSerializer(serializers.ModelSerializer):
     # Sử dụng CharField và trỏ source đến property `display_name`
     name = serializers.CharField(source='display_name', read_only=True)
     property_type_code = serializers.CharField(source='property_type.code')
+    applicable_features = PropertyFeatureSerializer(many=True, read_only=True)
 
     class Meta:
         model = ListingCategory
-        # ID cần thiết để client gửi lên khi tạo tin
-        fields = ['id', 'name', 'property_type_code']
+        fields = ['id', 'name', 'property_type_code', 'applicable_features']
 
 class ListingTypeOptionSerializer(serializers.ModelSerializer):
     """
@@ -37,7 +40,10 @@ class ListingTypeOptionSerializer(serializers.ModelSerializer):
         model = ListingType
         # Chỉ lấy 2 trường mà frontend cần để hiển thị và xử lý logic
         fields = ['code', 'name']
-# ====================================
+
+# ==============================================================================
+# LỰA CHỌN THUỘC TÍNH BẤT ĐỘNG SẢN
+# ==============================================================================
 
 class DirectionOptionSerializer(serializers.ModelSerializer):
     icon_code = serializers.SerializerMethodField()
@@ -72,6 +78,9 @@ class UnitPriceOptionSerializer(serializers.ModelSerializer):
         model = UnitPrice
         fields = ['code', 'name']
 
+# ==============================================================================
+# LỰA CHỌN KINH DOANH & KHUYẾN MÃI
+# ==============================================================================
 
 class VipTypeOptionSerializer(serializers.ModelSerializer):
     """

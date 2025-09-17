@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 
+from django.contrib.gis.db import models as gis_models
 from apps.common.models import BaseModel
 from apps.properties.models import Property
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -37,6 +38,8 @@ class Review(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="reviews", verbose_name="Người đánh giá")
     rating = models.PositiveIntegerField(choices=[(i, i) for i in range(1, 6)], verbose_name="Điểm")
     comment = models.TextField(verbose_name="Bình luận")
+
+    point = gis_models.PointField(srid=4326, null=True, blank=True, verbose_name="Vị trí lúc đánh giá")
 
     class Meta:
         unique_together = ("user", "property")

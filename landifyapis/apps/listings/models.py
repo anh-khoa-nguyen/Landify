@@ -1,15 +1,20 @@
 import builtins
 from django.contrib.humanize.templatetags.humanize import intcomma
-from datetime import timedelta, timezone
+from datetime import timedelta
+from django.utils import timezone
 
 from ckeditor.fields import RichTextField
 from django.db import models
 
 from apps.common.models import BaseModel
 from apps.properties.models import Property, PropertyType, PropertyFeature, Direction
-
-# Import các model liên quan
 from apps.users.models import User
+
+# ==============================================================================
+# CONFIGURATION & LOOKUP MODELS
+# ==============================================================================
+# Các model này định nghĩa các tùy chọn, loại hình và quy tắc cơ bản
+# cho việc tạo và phân loại tin đăng.
 
 class UnitPrice(models.Model):
     """Model để định nghĩa các loại đơn vị giá."""
@@ -30,6 +35,12 @@ class ListingType(BaseModel):
     code = models.CharField(max_length=50, unique=True,
         help_text="Mã định danh không đổi, ví dụ: BUY_SELL, RENT, PROJECT")
 
+    applicable_unit_prices = models.ManyToManyField(
+        'UnitPrice',
+        blank=True,
+        verbose_name="Các đơn vị giá áp dụng"
+    )
+
     def __str__(self):
         return self.name
 
@@ -37,15 +48,27 @@ class ListingType(BaseModel):
         verbose_name = "Loại tin đăng"
         verbose_name_plural = "Các Loại tin đăng"
 
-
 class ListingCategory(BaseModel):
     """
     Model để định nghĩa các cặp (ListingType, PropertyType) hợp lệ.
+    Định nghĩa các feature nào áp dụng cho từng cặp.
     Đây là "bảng quy tắc" tinh gọn, không chứa dữ liệu dư thừa.
     """
 
     listing_type = models.ForeignKey(ListingType, on_delete=models.CASCADE)
     property_type = models.ForeignKey('properties.PropertyType', on_delete=models.CASCADE)
+
+    applicable_features = models.ManyToManyField(
+        'properties.PropertyFeature',
+        blank=True,
+        verbose_name="Các đặc điểm áp dụng"
+    )
+
+    applicable_unit_prices = models.ManyToManyField(
+        'UnitPrice',
+        blank=True,
+        verbose_name="Các đơn vị giá áp dụng"
+    )
 
     # Thêm một property để tự động tạo ra tên hiển thị khi cần
     @property
@@ -57,10 +80,16 @@ class ListingCategory(BaseModel):
         return self.display_name
 
     class Meta:
-        verbose_name = "Danh mục Hợp lệ"
-        verbose_name_plural = "Các Danh mục Hợp lệ"
+        verbose_name = "Danh mục Đăng tin"
+        verbose_name_plural = "Các Danh mục Đăng tin"
         unique_together = ('listing_type', 'property_type')
         ordering = ['listing_type__name', 'property_type__name']
+
+# ==============================================================================
+# BUSINESS & PROMOTION MODELS
+# ==============================================================================
+# Các model này quản lý logic kinh doanh, chẳng hạn như các gói VIP,
+# quy tắc khuyến mãi và các mã giảm giá cụ thể của người dùng.
 
 class VipType(BaseModel):
     """
@@ -84,236 +113,6 @@ class VipType(BaseModel):
         verbose_name = "Loại tin VIP"
         verbose_name_plural = "Các loại tin VIP"
         ordering = ["-sort_priority"]
-
-class ListingPropertyFeatureValue(BaseModel):
-    """
-    Bảng trung gian lưu giá trị cụ thể của một đặc điểm cho một tin đăng.
-    Ví dụ: Tin đăng A có đặc điểm "Mặt tiền" với giá trị là "5.5" (m).
-    """
-
-    listing = models.ForeignKey("Listing", on_delete=models.CASCADE, related_name="feature_values")
-    feature = models.ForeignKey(PropertyFeature, on_delete=models.CASCADE, related_name="listing_values")
-
-    value = models.JSONField(verbose_name="Giá trị")
-
-    def __str__(self):
-        return f"{self.listing.title} - {self.feature.name}: {str(self.value)}"
-
-    @property
-    def display_value(self):
-        """
-        Một property để hiển thị giá trị một cách thân thiện trên trang admin hoặc API.
-        """
-        feature_type = self.feature.feature_type
-        if feature_type == PropertyFeature.FeatureType.DIRECTION:
-            try:
-                direction_id = int(self.value)
-                direction = Direction.objects.get(pk=direction_id)
-                return direction.name
-            except (ValueError, TypeError, Direction.DoesNotExist):
-                return "Không rõ"
-        return self.value
-
-    class Meta:
-        verbose_name = "Giá trị Đặc điểm của Tin đăng"
-        verbose_name_plural = "Các Giá trị Đặc điểm của Tin đăng"
-        unique_together = ("listing", "feature")
-
-
-class Listing(BaseModel):
-    """Model Tin đăng - Chứa thông tin của một lần chào bán/cho thuê."""
-
-    class Status(models.TextChoices):
-        AVAILABLE = "AVAILABLE", "Đang đăng"
-        PENDING = "PENDING", "Đang chờ giao dịch"
-        COMPLETED = "COMPLETED", "Đã giao dịch"
-        CANCELLED = "CANCELLED", "Đã hủy"
-
-    class SpamCheckStatus(models.TextChoices):
-        PENDING = "PENDING", "Chờ kiểm tra"
-        CLEAN = "CLEAN", "Trong sạch"
-        FLAGGED = "FLAGGED", "Bị đánh dấu spam"
-
-    property = models.ForeignKey(
-        Property, on_delete=models.CASCADE, related_name="listings", verbose_name="Bất động sản"
-    )
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="listings", verbose_name="Người đăng tin")
-    listing_type = models.ForeignKey(
-        ListingType, on_delete=models.SET_NULL, null=True, verbose_name="Loại tin đăng (Bán/Thuê/Dự án)"
-    )
-    title = models.CharField(max_length=255, verbose_name="Tiêu đề")
-    content = RichTextField(verbose_name="Nội dung")
-    price_value = models.DecimalField(
-        max_digits=19, decimal_places=2, null=True, blank=True, verbose_name="Giá trị (số)"
-    )
-    unit_price = models.ForeignKey(
-        UnitPrice, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Đơn vị giá"
-    )
-    features = models.ManyToManyField(
-        PropertyFeature,
-        through=ListingPropertyFeatureValue,
-        related_name="listings",
-        verbose_name="Các đặc điểm chi tiết",
-    )
-
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.AVAILABLE, verbose_name="Trạng thái"
-    )
-    spam_check_status = models.CharField(
-        max_length=20, choices=SpamCheckStatus.choices, default=SpamCheckStatus.PENDING, verbose_name="Trạng thái Spam"
-    )
-    commission_percentage = models.FloatField(verbose_name="Phần trăm hoa hồng (%)", default=0.0)
-
-    @builtins.property
-    def display_price(self):
-        if self.price_value is None:
-            return "Giá thỏa thuận"
-
-        formatted_value = intcomma(int(self.price_value))
-
-        if self.unit_price is None:
-            return f"{formatted_value} VND"  # Mặc định là VND nếu không có đơn vị
-
-            # Nếu đơn vị là VND, chỉ cần thêm "VND"
-        if self.unit_price.code == 'VND':
-            return f"{formatted_value} VND"
-
-            # Nếu là các đơn vị khác, nối số và đơn vị lại
-            # Ví dụ: "6,452,147 /m²" hoặc "85,000,000 /tháng"
-        return f"{formatted_value} {self.unit_price.name}"
-
-    def __str__(self):
-        return self.title
-
-    class Meta:
-        verbose_name = "Tin đăng"
-        verbose_name_plural = "Các Tin đăng"
-
-
-class ListingVip(BaseModel): # Vẫn kế thừa BaseModel để có created_date, updated_date
-    """
-    Lưu trữ trạng thái VIP hiện tại của một Tin đăng.
-    """
-    listing = models.OneToOneField( # <-- THAY ĐỔI: OneToOneField
-        Listing,
-        on_delete=models.CASCADE,
-        related_name="vip_status",
-        verbose_name="Tin đăng",
-        primary_key=True
-    )
-    vip_type = models.ForeignKey(
-        VipType,
-        on_delete=models.SET_NULL,
-        null=True,
-        verbose_name="Loại gói VIP hiện tại"
-    )
-
-    end_date = models.DateTimeField(
-        verbose_name="Ngày kết thúc VIP",
-        null=True,
-        blank=True
-    )
-
-    @property
-    def is_active(self):
-        """Kiểm tra xem trạng thái VIP có còn hoạt động không."""
-        if not self.end_date or not self.vip_type:
-            return False
-        return timezone.now() <= self.end_date
-
-    def __str__(self):
-        if self.is_active:
-            return f"{self.listing.title} - {self.vip_type.name} (còn hiệu lực)"
-        return f"{self.listing.title} - Không có VIP"
-
-    class Meta:
-        verbose_name = "Trạng thái VIP của Tin đăng"
-        verbose_name_plural = "Các trạng thái VIP của Tin đăng"
-
-#====================DETAILS=======================
-
-class BuySellDetail(BaseModel):
-    """Lưu các trường chỉ dành riêng cho tin đăng Mua/Bán."""
-
-    class ConditionStatus(models.TextChoices):
-        NEW = "NEW", "Mới 100%"
-        RENOVATED = "RENOVATED", "Đã cải tạo"
-        GOOD = "GOOD", "Tình trạng tốt"
-        NEEDS_REPAIR = "NEEDS_REPAIR", "Cần sửa chữa"
-
-    listing = models.OneToOneField(
-        "Listing", on_delete=models.CASCADE, related_name="buysell_detail", verbose_name="Tin đăng"
-    )
-    is_mortgaged = models.BooleanField(null=True, blank=True, verbose_name="Đang thế chấp ngân hàng?")
-    condition_status = models.CharField(
-        max_length=20, choices=ConditionStatus.choices, null=True, blank=True, verbose_name="Tình trạng hiện tại"
-    )
-
-    class Meta:
-        verbose_name = "Chi tiết tin Bán/Mua"
-        verbose_name_plural = "Các chi tiết tin Bán/Mua"
-
-    def __str__(self):
-        return f"Chi tiết mua bán: {self.listing.title}"
-
-class RentalDetail(BaseModel):
-    """Lưu các trường chỉ dành riêng cho tin đăng Cho Thuê."""
-
-    listing = models.OneToOneField(
-        "Listing", on_delete=models.CASCADE, related_name="rental_detail", verbose_name="Tin đăng"
-    )
-    deposit_amount = models.DecimalField(
-        max_digits=19, decimal_places=2, null=True, blank=True, verbose_name="Số tiền cọc"
-    )
-    min_lease_duration = models.PositiveIntegerField(
-        null=True, blank=True, verbose_name="Thời hạn thuê tối thiểu (tháng)"
-    )
-    allow_pets = models.BooleanField(
-        null=True, blank=True, verbose_name="Cho phép nuôi thú cưng"
-    )  # null = true <=> Có/Không/Không đề cập
-    allow_smoking = models.BooleanField(null=True, blank=True, verbose_name="Cho phép hút thuốc")
-    max_occupants = models.PositiveIntegerField(null=True, blank=True, verbose_name="Số người ở tối đa")
-    is_electricity_included = models.BooleanField(default=False, verbose_name="Giá thuê đã bao gồm điện")
-    is_water_included = models.BooleanField(default=False, verbose_name="Giá thuê đã bao gồm nước")
-    is_internet_included = models.BooleanField(
-        default=False, verbose_name="Giá thuê đã bao gồm Internet/Truyền hình cáp"
-    )
-    is_management_fee_included = models.BooleanField(default=False, verbose_name="Giá thuê đã bao gồm phí quản lý")
-    available_from_date = models.DateField(null=True, blank=True, verbose_name="Ngày có thể dọn vào")
-
-    class Meta:
-        verbose_name = "Chi tiết tin Cho thuê"
-        verbose_name_plural = "Các chi tiết tin Cho thuê"
-
-    def __str__(self):
-        return f"Chi tiết cho thuê: {self.listing.title}"
-
-class ProjectDetail(BaseModel):
-    """Lưu các trường chỉ dành riêng cho tin đăng Dự án."""
-
-    listing = models.OneToOneField(
-        "Listing", on_delete=models.CASCADE, related_name="project_detail", verbose_name="Tin đăng"
-    )
-    developer = models.CharField(max_length=255, verbose_name="Chủ đầu tư")
-    total_area = models.CharField(max_length=50, null=True, blank=True, verbose_name="Tổng diện tích đất dự án")
-    building_density = models.FloatField(null=True, blank=True, verbose_name="Mật độ xây dựng (%)")
-    scale_description = models.TextField(null=True, blank=True, verbose_name="Mô tả quy mô")
-
-    total_units = models.PositiveIntegerField(null=True, blank=True, verbose_name="Tổng số căn")
-    product_types = models.ManyToManyField(PropertyType, blank=True, verbose_name="Các loại hình sản phẩm trong dự án")
-    unit_area_range = models.CharField(max_length=100, null=True, blank=True, verbose_name="Khoảng diện tích sản phẩm")
-
-    ownership_form = models.CharField(max_length=255, null=True, blank=True, verbose_name="Hình thức sở hữu")
-    launch_date = models.DateField(null=True, blank=True, verbose_name="Ngày mở bán")
-    handover_date = models.DateField(null=True, blank=True, verbose_name="Ngày bàn giao (dự kiến)")
-
-    class Meta:
-        verbose_name = "Chi tiết tin Dự án"
-        verbose_name_plural = "Các chi tiết tin Dự án"
-
-    def __str__(self):
-        return f"Chi tiết dự án cho: {self.listing.title}"
-
 
 class PromotionRule(BaseModel):
     """
@@ -359,8 +158,163 @@ class PromotionRule(BaseModel):
         verbose_name = "Quy tắc Khuyến mãi"
         verbose_name_plural = "Các Quy tắc Khuyến mãi"
 
+# ==============================================================================
+# CORE LISTING MODELS
+# ==============================================================================
+# Đây là các model trung tâm của ứng dụng, chứa dữ liệu chính của tin đăng
+# và các thông tin mở rộng liên quan trực tiếp.
 
-# Model mới để lưu trữ khuyến mãi đã được áp dụng cho người dùng
+class ListingPropertyFeatureValue(BaseModel):
+    """
+    Bảng trung gian lưu giá trị cụ thể của một đặc điểm cho một tin đăng.
+    Ví dụ: Tin đăng A có đặc điểm "Mặt tiền" với giá trị là "5.5" (m).
+    """
+
+    listing = models.ForeignKey("Listing", on_delete=models.CASCADE, related_name="feature_values")
+    feature = models.ForeignKey(PropertyFeature, on_delete=models.CASCADE, related_name="listing_values")
+
+    value = models.JSONField(verbose_name="Giá trị")
+
+    def __str__(self):
+        return f"{self.listing.title} - {self.feature.name}: {str(self.value)}"
+
+    @property
+    def display_value(self):
+        """
+        Một property để hiển thị giá trị một cách thân thiện trên trang admin hoặc API.
+        """
+        feature_type = self.feature.feature_type
+        if feature_type == PropertyFeature.FeatureType.DIRECTION:
+            try:
+                direction_id = int(self.value)
+                direction = Direction.objects.get(pk=direction_id)
+                return direction.name
+            except (ValueError, TypeError, Direction.DoesNotExist):
+                return "Không rõ"
+        return self.value
+
+    class Meta:
+        verbose_name = "Giá trị Đặc điểm của Tin đăng"
+        verbose_name_plural = "Các Giá trị Đặc điểm của Tin đăng"
+        unique_together = ("listing", "feature")
+
+class Listing(BaseModel):
+    """Model Tin đăng - Chứa thông tin của một lần chào bán/cho thuê."""
+
+    class Status(models.TextChoices):
+        AVAILABLE = "AVAILABLE", "Đang đăng"
+        PENDING = "PENDING", "Đang chờ giao dịch"
+        COMPLETED = "COMPLETED", "Đã giao dịch"
+        CANCELLED = "CANCELLED", "Đã hủy"
+
+    class SpamCheckStatus(models.TextChoices):
+        PENDING = "PENDING", "Chờ kiểm tra"
+        CLEAN = "CLEAN", "Trong sạch"
+        FLAGGED = "FLAGGED", "Bị đánh dấu spam"
+
+    property = models.ForeignKey(
+        Property, on_delete=models.CASCADE, related_name="listings", verbose_name="Bất động sản"
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="listings", verbose_name="Người đăng tin")
+    listing_type = models.ForeignKey(
+        ListingType, on_delete=models.SET_NULL, null=True, verbose_name="Loại tin đăng (Bán/Thuê/Dự án)"
+    )
+    title = models.CharField(max_length=255, verbose_name="Tiêu đề")
+    content = RichTextField(verbose_name="Nội dung")
+    price_value = models.DecimalField(
+        max_digits=19, decimal_places=2, null=True, blank=True, verbose_name="Giá trị (số)"
+    )
+    unit_price = models.ForeignKey(
+        UnitPrice, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Đơn vị giá"
+    )
+    features = models.ManyToManyField(
+        PropertyFeature,
+        through=ListingPropertyFeatureValue,
+        related_name="listings",
+        verbose_name="Các đặc điểm chi tiết",
+    )
+
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.AVAILABLE, verbose_name="Trạng thái"
+    )
+    spam_check_status = models.CharField(
+        max_length=20, choices=SpamCheckStatus.choices, default=SpamCheckStatus.PENDING, verbose_name="Trạng thái Spam"
+    )
+    commission_percentage = models.FloatField(verbose_name="Phần trăm hoa hồng (%)", default=0.0)
+
+    scam_score = models.FloatField(null=True, blank=True, verbose_name="Điểm Scam (từ AI)")
+    scam_detector_version = models.CharField(max_length=50, blank=True, null=True,
+                                             verbose_name="Phiên bản AI phát hiện")
+
+    @builtins.property
+    def display_price(self):
+        if self.price_value is None:
+            return "Giá thỏa thuận"
+
+        formatted_value = intcomma(int(self.price_value))
+
+        if self.unit_price is None:
+            return f"{formatted_value} VND"  # Mặc định là VND nếu không có đơn vị
+
+            # Nếu đơn vị là VND, chỉ cần thêm "VND"
+        if self.unit_price.code == 'VND':
+            return f"{formatted_value} VND"
+
+            # Nếu là các đơn vị khác, nối số và đơn vị lại
+            # Ví dụ: "6,452,147 /m²" hoặc "85,000,000 /tháng"
+        return f"{formatted_value} {self.unit_price.name}"
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        verbose_name = "Tin đăng"
+        verbose_name_plural = "Các Tin đăng"
+
+class ListingVip(BaseModel): # Vẫn kế thừa BaseModel để có created_date, updated_date
+    """
+    Lưu trữ trạng thái VIP hiện tại của một Tin đăng.
+    """
+    listing = models.OneToOneField( # <-- THAY ĐỔI: OneToOneField
+        Listing,
+        on_delete=models.CASCADE,
+        related_name="vip_status",
+        verbose_name="Tin đăng",
+        primary_key=True
+    )
+    vip_type = models.ForeignKey(
+        VipType,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name="Loại gói VIP hiện tại"
+    )
+
+    end_date = models.DateTimeField(
+        verbose_name="Ngày kết thúc VIP",
+        null=True,
+        blank=True
+    )
+
+    @property
+    def is_active(self):
+        """Kiểm tra xem trạng thái VIP có còn hoạt động không."""
+        if not self.end_date or not self.vip_type:
+            return False
+        return timezone.now() <= self.end_date
+
+    def __str__(self):
+        if self.is_active:
+            return f"{self.listing.title} - {self.vip_type.name} (còn hiệu lực)"
+        return f"{self.listing.title} - Không có VIP"
+
+    class Meta:
+        verbose_name = "Trạng thái VIP của Tin đăng"
+        verbose_name_plural = "Các trạng thái VIP của Tin đăng"
+
+# ==============================================================================
+# USER
+# ==============================================================================
+
 class UserPromotion(BaseModel):
     """
     Một bản ghi cụ thể của một khuyến mãi đã được cấp cho người dùng.

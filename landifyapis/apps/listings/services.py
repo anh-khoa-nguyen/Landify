@@ -1,5 +1,4 @@
 from typing import IO, Any, Dict, List
-
 import cloudinary
 import cloudinary.uploader
 from django.db import transaction
@@ -11,7 +10,7 @@ from apps.common.services import BusinessLogicError, ProtestResolutionError
 from apps.properties import models as property_models # Import toàn bộ app properties
 from . import models as listing_models # Import app listings (đổi tên để tránh nhầm lẫn)
 
-from apps.common.tasks import listings as listing_tasks
+from apps.listings.tasks import moderation as moderation_tasks
 from apps.users.tasks import notifications as user_notification_tasks
 
 import logging
@@ -29,19 +28,68 @@ from apps.properties.models import PropertyMedia
 
 logger = logging.getLogger(__name__)
 
-def create_full_listing(*, user: property_models.User, validated_data: dict) -> listing_models.Listing:
+# ==============================================================================
+# INTERNAL HELPER FUNCTIONS (HÀM HỖ TRỢ NỘI BỘ)
+# ==============================================================================
+# Các hàm này không nên được gọi trực tiếp từ views, chúng chỉ hỗ trợ
+# các service function khác trong file này.
+
+def _update_or_create_vip_status(*, listing: listing_models.Listing, vip_package_data: dict):
+    """
+    Hàm helper để tạo mới hoặc gia hạn trạng thái VIP cho một tin đăng.
+    Đây là nơi chứa toàn bộ logic "cộng dồn" thông minh.
+    """
+    vip_type = vip_package_data.get('vip_type')
+    duration_days = vip_package_data.get('duration_days')
+    # Mặc định ngày bắt đầu là hôm nay nếu không được cung cấp
+    start_date = vip_package_data.get('start_date', timezone.localdate())
+
+    # Chuyển start_date thành datetime có nhận biết timezone
+    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+
+    # Lấy hoặc tạo mới bản ghi ListingVip cho tin đăng này
+    vip_status, created = listing_models.ListingVip.objects.get_or_create(
+        listing=listing,
+        defaults={'vip_type': vip_type}
+    )
+
+    # Xác định ngày bắt đầu để tính toán gia hạn
+    # Nếu gói VIP cũ đã hết hạn, ngày bắt đầu sẽ là ngày người dùng chọn (hoặc hôm nay)
+    # Nếu gói VIP cũ vẫn còn hạn, ngày bắt đầu sẽ là ngày hết hạn của gói cũ
+    base_date = timezone.now()
+    if not created and vip_status.is_active:
+        base_date = vip_status.end_date
+
+    # Đảm bảo ngày bắt đầu không sớm hơn thời điểm hiện tại
+    effective_start_date = max(base_date, start_datetime)
+
+    # Tính toán ngày kết thúc mới
+    new_end_date = effective_start_date + timedelta(days=duration_days)
+
+    # Cập nhật bản ghi vip_status
+    vip_status.vip_type = vip_type
+    vip_status.end_date = new_end_date
+    vip_status.save()
+
+# ==============================================================================
+# LISTING WRITE SERVICES (TÁC VỤ GHI / CHỈNH SỬA TIN ĐĂNG)
+# ==============================================================================
+# Các hàm chịu trách nhiệm tạo mới hoặc cập nhật dữ liệu của tin đăng.
+
+def create_full_listing(
+    *,
+    user: property_models.User,
+    listing_type: listing_models.ListingType,
+    property_type: property_models.PropertyType,
+    validated_data: dict
+) -> listing_models.Listing:
     """
     Tạo một tin đăng hoàn chỉnh, bao gồm cả việc tạo mới Property nếu cần.
     Hàm này được gọi bởi ListingCreateSerializer.
     """
-    listing_type = validated_data.pop('listing_type')
     # 1. Tách các dữ liệu lồng nhau ra khỏi validated_data
     property_id = validated_data.pop("property_id", None)
     property_data = validated_data.pop("property", None)
-
-    buysell_detail_data = validated_data.pop("buysell_detail", None)
-    rental_detail_data = validated_data.pop("rental_detail", None)
-    project_detail_data = validated_data.pop("project_detail", None)
     features_data = validated_data.pop("features", None)
     vip_package_data = validated_data.pop("vip_package", None)
     promotion_code = validated_data.pop("promotion_code", None)
@@ -57,7 +105,6 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
 
         # Kịch bản 2: Người dùng cung cấp dữ liệu để tạo BĐS mới
         elif property_data:
-            property_type_obj = property_data.pop("property_type")
             # Tách dữ liệu location lồng nhau ra
             location_data = property_data.pop("location")
 
@@ -68,7 +115,7 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
             property_obj = property_models.Property.objects.create(
                 owner=user,
                 location=location_obj,
-                property_type=property_type_obj,
+                property_type=property_type,
                 **property_data
             )
 
@@ -79,7 +126,12 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
 
         # 3. Tạo đối tượng Listing chính
         #    `validated_data` lúc này chỉ còn chứa các trường của Listing (title, content...)
-        listing = listing_models.Listing.objects.create(user=user, property=property_obj, listing_type=listing_type, **validated_data)
+        listing = listing_models.Listing.objects.create(
+            user=user,
+            property=property_obj,
+            listing_type=listing_type,  # Gán listing_type vào đây
+            **validated_data
+        )
 
         if vip_package_data:
             # Gọi một hàm helper mới để xử lý logic VIP
@@ -126,17 +178,7 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
             if feature_values_to_create:
                 listing_models.ListingPropertyFeatureValue.objects.bulk_create(feature_values_to_create)
 
-        # 4. Tạo các đối tượng chi tiết liên quan (OneToOne) nếu có
-        if buysell_detail_data:
-            listing_models.BuySellDetail.objects.create(listing=listing, **buysell_detail_data)
-
-        if rental_detail_data:
-            listing_models.RentalDetail.objects.create(listing=listing, **rental_detail_data)
-
-        if project_detail_data:
-            listing_models.ProjectDetail.objects.create(listing=listing, **project_detail_data)
-
-    listing_tasks.check_listing_for_spam.delay(listing.id)
+    moderation_tasks.check_listing_for_spam.delay(listing.id)
 
     user_notification_tasks.notify_followers_of_new_listing.delay(
         owner_id=user.id,
@@ -144,44 +186,6 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
     )
 
     return listing
-
-
-def _update_or_create_vip_status(*, listing: listing_models.Listing, vip_package_data: dict):
-    """
-    Hàm helper để tạo mới hoặc gia hạn trạng thái VIP cho một tin đăng.
-    Đây là nơi chứa toàn bộ logic "cộng dồn" thông minh.
-    """
-    vip_type = vip_package_data.get('vip_type')
-    duration_days = vip_package_data.get('duration_days')
-    # Mặc định ngày bắt đầu là hôm nay nếu không được cung cấp
-    start_date = vip_package_data.get('start_date', timezone.localdate())
-
-    # Chuyển start_date thành datetime có nhận biết timezone
-    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
-
-    # Lấy hoặc tạo mới bản ghi ListingVip cho tin đăng này
-    vip_status, created = listing_models.ListingVip.objects.get_or_create(
-        listing=listing,
-        defaults={'vip_type': vip_type}
-    )
-
-    # Xác định ngày bắt đầu để tính toán gia hạn
-    # Nếu gói VIP cũ đã hết hạn, ngày bắt đầu sẽ là ngày người dùng chọn (hoặc hôm nay)
-    # Nếu gói VIP cũ vẫn còn hạn, ngày bắt đầu sẽ là ngày hết hạn của gói cũ
-    base_date = timezone.now()
-    if not created and vip_status.is_active:
-        base_date = vip_status.end_date
-
-    # Đảm bảo ngày bắt đầu không sớm hơn thời điểm hiện tại
-    effective_start_date = max(base_date, start_datetime)
-
-    # Tính toán ngày kết thúc mới
-    new_end_date = effective_start_date + timedelta(days=duration_days)
-
-    # Cập nhật bản ghi vip_status
-    vip_status.vip_type = vip_type
-    vip_status.end_date = new_end_date
-    vip_status.save()
 
 def update_listing_features(*, listing: models.Listing, features_data: List[Dict[str, Any]]):
     """
@@ -256,6 +260,11 @@ def update_listing_features(*, listing: models.Listing, features_data: List[Dict
                 models.ListingPropertyFeatureValue.objects.update_or_create(
                     listing=listing, feature=feature, defaults={"value": validated_value}
                 )
+
+# ==============================================================================
+# LISTING QUERY SERVICES (TÁC VỤ TRUY VẤN TIN ĐĂNG)
+# ==============================================================================
+# Các hàm thực hiện các truy vấn phức tạp để tìm kiếm và chấm điểm tin đăng.
 
 def find_potential_listings(*, latitude: float, longitude: float, radius_km: int = 20):
     """

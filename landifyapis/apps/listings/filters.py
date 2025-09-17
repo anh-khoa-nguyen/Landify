@@ -3,15 +3,33 @@ import django_filters
 from django.db.models import Q
 from functools import partial
 
-from .models import Listing, BuySellDetail
+from .models import Listing
 
-def _filter_by_feature_value(queryset, name, value, feature_code):
+def filter_by_feature_exact(queryset, name, value, feature_code):
     processed_value = float(value)
 
     return queryset.filter(
         feature_values__feature__code=feature_code,
         feature_values__value__exact=processed_value
     ).distinct()
+
+def filter_by_feature_range(queryset, name, value, feature_code, lookup_expr):
+    """Lọc các tin đăng có feature với giá trị trong một khoảng (gte, lte)."""
+    # Chuyển đổi giá trị sang float để so sánh số
+    try:
+        numeric_value = float(value)
+    except (ValueError, TypeError):
+        return queryset.none() # Trả về rỗng nếu giá trị không phải là số
+
+    filter_kwargs = {
+        f'feature_values__feature__code': feature_code,
+        f'feature_values__value__{lookup_expr}': numeric_value
+    }
+    return queryset.filter(**filter_kwargs).distinct()
+
+# ==============================================================================
+# == BỘ LỌC CHÍNH
+# ==============================================================================
 
 class ListingFilter(django_filters.FilterSet):
     """
@@ -36,38 +54,43 @@ class ListingFilter(django_filters.FilterSet):
 
     # 5. Lọc theo các đặc điểm (features) - Đây là phần phức tạp nhất
     beds = django_filters.NumberFilter(
-        method=partial(_filter_by_feature_value, feature_code='NUM_BEDROOMS'),
+        method=partial(filter_by_feature_exact, feature_code='NUM_BEDROOMS'),
         label="Số phòng ngủ"
     )
     baths = django_filters.NumberFilter(
-        method=partial(_filter_by_feature_value, feature_code='NUM_BATHROOMS'),
+        method=partial(filter_by_feature_exact, feature_code='NUM_BATHROOMS'),
         label="Số phòng tắm"
     )
 
     direction_code = django_filters.CharFilter(method='filter_by_direction', label="Hướng nhà")
-
     amenities = django_filters.CharFilter(method='filter_by_amenities', label="Lọc theo nhiều tiện ích")
 
-    # === BỘ LỌC CHO RENTAL DETAIL (CHO THUÊ) ===
-    min_deposit = django_filters.NumberFilter(field_name='rental_detail__deposit_amount', lookup_expr='gte')
-    max_deposit = django_filters.NumberFilter(field_name='rental_detail__deposit_amount', lookup_expr='lte')
-    min_lease = django_filters.NumberFilter(field_name='rental_detail__min_lease_duration', lookup_expr='gte')
-    max_lease = django_filters.NumberFilter(field_name='rental_detail__min_lease_duration', lookup_expr='lte')
-    allow_pets = django_filters.BooleanFilter(field_name='rental_detail__allow_pets')
-    allow_smoking = django_filters.BooleanFilter(field_name='rental_detail__allow_smoking')
-    max_occupants = django_filters.NumberFilter(field_name='rental_detail__max_occupants', lookup_expr='lte')
-    electricity_included = django_filters.BooleanFilter(field_name='rental_detail__is_electricity_included')
-    water_included = django_filters.BooleanFilter(field_name='rental_detail__is_water_included')
-    internet_included = django_filters.BooleanFilter(field_name='rental_detail__is_internet_included')
-    management_fee_included = django_filters.BooleanFilter(field_name='rental_detail__is_management_fee_included')
-    available_from = django_filters.DateFilter(field_name='rental_detail__available_from_date', lookup_expr='gte')
+    # --- Bộ lọc cho CHO THUÊ (thay thế RentalDetail) ---
+    min_deposit = django_filters.NumberFilter(
+        method=partial(filter_by_feature_range, feature_code='DEPOSIT_AMOUNT', lookup_expr='gte'),
+        label="Tiền cọc tối thiểu"
+    )
+    max_deposit = django_filters.NumberFilter(
+        method=partial(filter_by_feature_range, feature_code='DEPOSIT_AMOUNT', lookup_expr='lte'),
+        label="Tiền cọc tối đa"
+    )
+    min_lease = django_filters.NumberFilter(
+        method=partial(filter_by_feature_range, feature_code='MIN_LEASE_DURATION', lookup_expr='gte'),
+        label="Thời hạn thuê tối thiểu (tháng)"
+    )
+    allow_pets = django_filters.BooleanFilter(
+        method=partial(filter_by_feature_exact, feature_code='ALLOW_PETS'),
+        label="Cho phép thú cưng"
+    )
 
-    # === BỘ LỌC CHO BUYSELL DETAIL (MUA BÁN) ===
-    is_mortgaged = django_filters.BooleanFilter(field_name='buysell_detail__is_mortgaged')
-    # Dùng ChoiceFilter để lọc theo các lựa chọn có sẵn trong model
-    condition_status = django_filters.ChoiceFilter(
-        field_name='buysell_detail__condition_status',
-        choices=BuySellDetail.ConditionStatus.choices
+    # --- Bộ lọc cho MUA BÁN (thay thế BuySellDetail) ---
+    is_mortgaged = django_filters.BooleanFilter(
+        method=partial(filter_by_feature_exact, feature_code='IS_MORTGAGED'),
+        label="Đang thế chấp"
+    )
+    condition_status = django_filters.CharFilter(
+        method=partial(filter_by_feature_exact, feature_code='CONDITION_STATUS'),
+        label="Tình trạng nhà"
     )
 
     class Meta:
@@ -91,9 +114,9 @@ class ListingFilter(django_filters.FilterSet):
         try:
             direction_id = Direction.objects.get(code=value).id
             return queryset.filter(
-                feature_values__feature__name='Hướng ban công',
-                feature_values__value__exact=str(direction_id)
-            )
+                feature_values__feature__code='BALCONY_DIRECTION',
+                feature_values__value__exact=direction_id
+            ).distinct()
         except Direction.DoesNotExist:
             return queryset.none()
 

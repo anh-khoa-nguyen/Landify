@@ -3,10 +3,11 @@ from datetime import datetime
 from django.db import transaction
 from django.db.models import Count, Sum
 from django.utils import timezone
+from typing import Tuple
 
 from apps.users.models import User
 from apps.listings.models import Listing, Property
-from .models import Appointment, Review, Cooperation, Chat
+from .models import Appointment, Review, Cooperation, Chat, Wishlist
 from .serializers import ReviewSerializer
 
 from apps.common.tasks import notifications
@@ -106,15 +107,18 @@ def rate_property_and_update_score(
     property_location = prop.location.point
 
     # 4. Tính khoảng cách
-    distance_from_property = property_location.distance(user_location) * 100 # GeoDjango trả về độ, nhân ~100 để ra km
+    distance_in_meters = property_location.distance(user_location) * 100000 # Chuyển đổi từ độ sang mét (ước lượng)
+
+    VERIFICATION_RADIUS_METERS = 5000
 
     # 5. So sánh với ngưỡng 5km
-    if distance_from_property > 5:  # distance_from_property.km > 5
+    if distance_in_meters > VERIFICATION_RADIUS_METERS:
         raise BusinessLogicError(
-            f"Bạn phải ở trong bán kính 5km của bất động sản để có thể gửi đánh giá. Khoảng cách hiện tại của bạn là {distance_from_property:.2f} km.")
+            f"Bạn phải ở trong bán kính {VERIFICATION_RADIUS_METERS / 1000}km của bất động sản để có thể gửi đánh giá."
+        )
 
     with transaction.atomic():
-        review = serializer.save(user=user, property=prop)
+        review = serializer.save(user=user, property=prop, point=user_location)
 
         owner_profile = prop.owner.profile
 
@@ -210,32 +214,78 @@ class CooperationActionError(BusinessLogicError):
     pass
 
 
-def respond_to_cooperation_request(*, user, request_id, action):
+def respond_to_cooperation_request(
+    *,
+    cooperation: Cooperation,
+    actor: User,
+    action: str,
+    reason: str = None
+) -> Cooperation:
     """
     Xử lý hành động chấp nhận hoặc từ chối một yêu cầu hợp tác.
-    """
-    try:
-        coop_request = Cooperation.objects.select_related('listing__user').get(id=request_id)
-    except Cooperation.DoesNotExist:
-        raise CooperationActionError("Yêu cầu hợp tác không tồn tại.")
+    Hàm này chứa toàn bộ logic nghiệp vụ và kiểm tra quyền.
 
-    # Kiểm tra quyền: Chỉ chủ tin đăng mới được phản hồi
-    if coop_request.listing.user != user:
+    Args:
+        cooperation (Cooperation): Đối tượng yêu cầu hợp tác cần xử lý.
+        actor (User): Người dùng thực hiện hành động (phải là chủ tin đăng).
+        action (str): Hành động cần thực hiện ('accept' hoặc 'reject').
+        reason (str, optional): Lý do từ chối. Defaults to None.
+
+    Returns:
+        Cooperation: Đối tượng hợp tác đã được cập nhật.
+    """
+    # 1. Kiểm tra quyền: Chỉ chủ tin đăng (owner) mới được phản hồi
+    if cooperation.owner != actor:
         raise CooperationActionError("Bạn không có quyền phản hồi yêu cầu này.")
 
-    if coop_request.status != Cooperation.Status.PENDING:
+    # 2. Kiểm tra trạng thái: Chỉ có thể xử lý các yêu cầu đang chờ
+    if cooperation.status != Cooperation.Status.PENDING:
         raise CooperationActionError("Yêu cầu này đã được xử lý trước đó.")
 
+    # 3. Cập nhật trạng thái dựa trên hành động
     if action == 'accept':
-        coop_request.status = Cooperation.Status.ACCEPTED
-        # TODO: Thêm logic nghiệp vụ ở đây, ví dụ:
-        # - Tạo một bản ghi hợp tác chính thức
-        # - Gửi thông báo cho người yêu cầu
+        cooperation.status = Cooperation.Status.ACCEPTED
+        cooperation.rejection_reason = None # Xóa lý do từ chối cũ nếu có
     elif action == 'reject':
-        coop_request.status = Cooperation.Status.REJECTED
-        # TODO: Gửi thông báo cho người yêu cầu
+        cooperation.status = Cooperation.Status.REJECTED
+        cooperation.rejection_reason = reason
     else:
-        raise CooperationActionError("Hành động không hợp lệ.")
+        raise CooperationActionError("Hành động không hợp lệ. Chỉ chấp nhận 'accept' hoặc 'reject'.")
 
-    coop_request.save()
-    return coop_request
+    cooperation.save()
+
+    # 4. (Tác dụng phụ) Gửi thông báo đến người yêu cầu (agent)
+    # TODO: Bạn có thể kích hoạt task gửi thông báo ở đây
+    # title = f"Yêu cầu hợp tác của bạn đã được {cooperation.get_status_display()}"
+    # content = f"Chủ tin '{cooperation.owner.username}' đã {cooperation.get_status_display().lower()} yêu cầu hợp tác cho tin '{cooperation.listing.title}'."
+    # notifications.send_notification_to_user.delay(user_id=cooperation.agent.id, ...)
+
+    return cooperation
+
+def toggle_wishlist_item(*, user: User, listing: Listing) -> Tuple[str, Wishlist | None]:
+    """
+    Xử lý logic thêm/xóa (toggle) một tin đăng vào danh sách yêu thích của người dùng.
+
+    Args:
+        user (User): Người dùng thực hiện hành động.
+        listing (Listing): Tin đăng được thêm/xóa.
+
+    Returns:
+        Một tuple chứa:
+        - Trạng thái ('added' hoặc 'removed').
+        - Đối tượng Wishlist (nếu được thêm) hoặc None (nếu bị xóa).
+    """
+    # get_or_create trả về một tuple (object, created)
+    # created là một boolean: True nếu object vừa được tạo, False nếu nó đã tồn tại.
+    wishlist_item, created = Wishlist.objects.get_or_create(
+        user=user,
+        listing=listing
+    )
+
+    if created:
+        # Nếu vừa được TẠO MỚI (thêm vào)
+        return "added", wishlist_item
+    else:
+        # Nếu đã TỒN TẠI -> XÓA ĐI
+        wishlist_item.delete()
+        return "removed", None

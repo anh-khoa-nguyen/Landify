@@ -134,11 +134,16 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
         listing = get_object_from_public_id_or_404(Listing.objects, public_id)
         prop = listing.property
-        # =================
+
+        user_latitude = serializer.validated_data.get('latitude')
+        user_longitude = serializer.validated_data.get('longitude')
+
         interactions_services.rate_property_and_update_score(
             user=self.request.user,
             prop=prop,
-            serializer=serializer
+            serializer=serializer,
+            user_latitude = user_latitude,
+            user_longitude = user_longitude
         )
         return
 
@@ -321,32 +326,27 @@ class CooperationViewSet(viewsets.ModelViewSet):
     @action(methods=['post'], detail=True, url_path='respond')
     def respond(self, request, pk=None):
         """
-        Action để chủ tin đăng phản hồi một yêu cầu (accept/reject).
-        URL: /api/cooperations/{id}/respond/
+        Action để chủ tin đăng phản hồi một yêu cầu (accept/reject) bằng cách gọi service.
         """
+        # 1. Lấy đối tượng Cooperation từ URL
         cooperation = self.get_object()
-        action_type = request.data.get('action')  # 'accept' hoặc 'reject'
-        reason = request.data.get('reason')  # Lý do (chỉ cần cho 'reject')
 
-        if not action_type in ['accept', 'reject']:
-            return Response({'error': 'Hành động không hợp lệ.'}, status=status.HTTP_400_BAD_REQUEST)
+        # 2. Lấy dữ liệu từ request body
+        action_type = request.data.get('action')
+        reason = request.data.get('reason')
 
-        # TODO: Chuyển logic này vào service `respond_to_cooperation_request`
+        # 3. Gọi service để thực hiện toàn bộ logic nghiệp vụ
         try:
-            # Kiểm tra quyền: Chỉ owner mới được respond
-            if cooperation.owner != request.user:
-                return Response({'error': 'Bạn không có quyền thực hiện hành động này.'},
-                                status=status.HTTP_403_FORBIDDEN)
-
-            if action_type == 'accept':
-                cooperation.status = Cooperation.Status.ACCEPTED
-            elif action_type == 'reject':
-                cooperation.status = Cooperation.Status.REJECTED
-                cooperation.rejection_reason = reason
-
-            cooperation.save()
-            # TODO: Gửi thông báo đến agent
-
-            return Response(self.get_serializer(cooperation).data, status=status.HTTP_200_OK)
-        except Exception as e:
+            updated_cooperation = interactions_services.respond_to_cooperation_request(
+                cooperation=cooperation,
+                actor=request.user,
+                action=action_type,
+                reason=reason
+            )
+        except CooperationActionError as e:
+            # Bắt lỗi nghiệp vụ cụ thể và trả về lỗi 400
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 4. Serialize kết quả và trả về response thành công
+        serializer = self.get_serializer(updated_cooperation)
+        return Response(serializer.data, status=status.HTTP_200_OK)

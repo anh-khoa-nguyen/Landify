@@ -69,13 +69,6 @@ class ReportSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
 
         return data
 
-class ModerationActionSerializer(serializers.ModelSerializer):
-    moderator = UserSerializer(read_only=True, fields=("id", "get_full_name"))
-
-    class Meta:
-        model = ModerationAction
-        fields = '__all__'
-
 class ProtestSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Protest (Kháng nghị)."""
 
