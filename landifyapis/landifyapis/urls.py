@@ -32,6 +32,8 @@ urlpatterns = [
     path("api/address/", include("vi_address.urls")),
     path('api/common/', include('apps.common.urls')),  # <-- THÊM DÒNG NÀY
 
+    path('api/payment/', include('apps.payment.urls')),
+
     # URL cho giao diện Redoc
     path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

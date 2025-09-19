@@ -106,8 +106,15 @@ def create_full_listing(
 
         # Kịch bản 2: Người dùng cung cấp dữ liệu để tạo BĐS mới
         elif property_data:
-            # Tách dữ liệu location lồng nhau ra
             location_data = property_data.pop("location")
+
+            latitude = location_data.pop('latitude', None)
+            longitude = location_data.pop('longitude', None)
+
+            # 2. Tạo đối tượng Point nếu có tọa độ
+            if latitude is not None and longitude is not None:
+                # Gán đối tượng Point vào key 'point' trong dictionary
+                location_data['point'] = Point(longitude, latitude, srid=4326)
 
             # === THAY ĐỔI 2: SỬ DỤNG MODEL TỪ APP PROPERTIES ===
             location_obj = property_models.Location.objects.create(**location_data)

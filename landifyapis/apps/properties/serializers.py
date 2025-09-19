@@ -78,21 +78,6 @@ class LocationSerializer(serializers.ModelSerializer):
             "latitude", "longitude",
         ]
 
-    def create(self, validated_data):
-        # Lấy và xóa lat/lng ra khỏi validated_data để chúng không được
-        # truyền trực tiếp vào Location.objects.create()
-        latitude = validated_data.pop('latitude', None)
-        longitude = validated_data.pop('longitude', None)
-
-        # Nếu cả lat và lng đều được cung cấp
-        if latitude is not None and longitude is not None:
-            # Tạo một đối tượng Point từ GeoDjango
-            # Lưu ý: Point nhận vào (longitude, latitude)
-            validated_data['point'] = Point(longitude, latitude, srid=4326)
-
-        # Gọi hàm create gốc với validated_data đã được cập nhật
-        return super().create(validated_data)
-
 class PropertyMediaSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model PropertyMedia."""
 

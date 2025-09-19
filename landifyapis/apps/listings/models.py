@@ -270,6 +270,15 @@ class ListingVip(BaseModel): # Vẫn kế thừa BaseModel để có created_dat
     """
     Lưu trữ trạng thái VIP hiện tại của một Tin đăng.
     """
+    class PaymentStatus(models.TextChoices):
+        PENDING = "PENDING", "Chờ thanh toán"
+        PAID = "PAID", "Đã thanh toán"
+        FAILED = "FAILED", "Thanh toán thất bại"
+
+    class PaymentMethod(models.TextChoices):
+        MOMO = "MOMO", "Ví MoMo"
+        BANK_TRANSFER = "BANK", "Chuyển khoản"
+
     listing = models.OneToOneField( # <-- THAY ĐỔI: OneToOneField
         Listing,
         on_delete=models.CASCADE,
@@ -290,21 +299,35 @@ class ListingVip(BaseModel): # Vẫn kế thừa BaseModel để có created_dat
         blank=True
     )
 
+    amount = models.DecimalField(
+        max_digits=19, decimal_places=2, default=0, verbose_name="Số tiền thanh toán"
+    )
+    payment_status = models.CharField(
+        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING
+    )
+    payment_method = models.CharField(
+        max_length=50, choices=PaymentMethod.choices, null=True, blank=True
+    )
+    # Lưu requestId hoặc orderId để đối soát với MoMo
+    payment_code = models.CharField(max_length=255, null=True, blank=True)
+    # URL thanh toán do MoMo trả về
+    pay_url = models.URLField(max_length=512, null=True, blank=True)
+
     @property
     def is_active(self):
         """Kiểm tra xem trạng thái VIP có còn hoạt động không."""
-        if not self.end_date or not self.vip_type:
+        if not self.end_date or not self.vip_type or self.payment_status != self.PaymentStatus.PAID:
             return False
         return timezone.now() <= self.end_date
 
     def __str__(self):
         if self.is_active:
-            return f"{self.listing.title} - {self.vip_type.name} (còn hiệu lực)"
-        return f"{self.listing.title} - Không có VIP"
+            return f"{self.listing.title} - {self.vip_type.name} (còn hiệu lực đến {self.end_date.strftime('%d/%m/%Y %H:%M')})"
+        return f"Hóa đơn VIP cho {self.listing.title} - {self.get_payment_status_display()}"
 
     class Meta:
-        verbose_name = "Trạng thái VIP của Tin đăng"
-        verbose_name_plural = "Các trạng thái VIP của Tin đăng"
+        verbose_name = "Trạng thái VIP & Hóa đơn"
+        verbose_name_plural = "Các trạng thái VIP & Hóa đơn"
 
 # ==============================================================================
 # USER

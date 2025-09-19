@@ -233,6 +233,12 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
+MOMO_PARTNER_CODE = os.getenv('MOMO_PARTNER_CODE')
+MOMO_ACCESS_KEY = os.getenv('MOMO_ACCESS_KEY')
+MOMO_SECRET_KEY = os.getenv('MOMO_SECRET_KEY')
+MOMO_REDIRECT_URL = os.getenv('MOMO_REDIRECT_URL')
+MOMO_IPN_URL_BASE = os.getenv('MOMO_IPN_URL_BASE')
+
 # ==============================================================================
 # DJANGO CHANNELS
 # ==============================================================================
