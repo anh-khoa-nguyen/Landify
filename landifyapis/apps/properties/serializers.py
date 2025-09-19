@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from vi_address.models import Ward
+from django.contrib.gis.geos import Point
 
 from apps.common.mixins import DynamicFieldsMixin
 from apps.common.frontend_maps import feature_maps
@@ -66,12 +67,31 @@ class LocationSerializer(serializers.ModelSerializer):
         queryset=Ward.objects.all(), write_only=True, required=True
     )
 
+    latitude = serializers.FloatField(write_only=True, required=False)
+    longitude = serializers.FloatField(write_only=True, required=False)
+
     class Meta:
         model = Location
         fields = [
             "id", "street", "point", "ward", "ward_name",
             "district_name", "city_name",
+            "latitude", "longitude",
         ]
+
+    def create(self, validated_data):
+        # Lấy và xóa lat/lng ra khỏi validated_data để chúng không được
+        # truyền trực tiếp vào Location.objects.create()
+        latitude = validated_data.pop('latitude', None)
+        longitude = validated_data.pop('longitude', None)
+
+        # Nếu cả lat và lng đều được cung cấp
+        if latitude is not None and longitude is not None:
+            # Tạo một đối tượng Point từ GeoDjango
+            # Lưu ý: Point nhận vào (longitude, latitude)
+            validated_data['point'] = Point(longitude, latitude, srid=4326)
+
+        # Gọi hàm create gốc với validated_data đã được cập nhật
+        return super().create(validated_data)
 
 class PropertyMediaSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model PropertyMedia."""

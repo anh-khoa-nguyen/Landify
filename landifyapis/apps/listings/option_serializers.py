@@ -163,21 +163,3 @@ class UserPromotionOptionSerializer(serializers.ModelSerializer):
             'applicable_vip_type_codes',
         ]
 
-# ==============================================================================
-#
-# ==============================================================================
-
-class FilterableFeatureSerializer(serializers.ModelSerializer):
-    """
-    Serializer chỉ trả về các thông tin cần thiết cho một feature trong BỘ LỌC.
-    """
-    choices = serializers.SerializerMethodField()
-
-    class Meta:
-        model = PropertyFeature
-        fields = ['name', 'code', 'feature_type', 'choices']
-
-    def get_choices(self, obj: PropertyFeature) -> list | None:
-        if obj.choice_group:
-            return choices_maps.get_feature_choices(obj.choice_group)
-        return None

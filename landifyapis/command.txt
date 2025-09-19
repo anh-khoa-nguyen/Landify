@@ -1,0 +1,1 @@
+#daphne -p 8000 landifyapis.asgi:application

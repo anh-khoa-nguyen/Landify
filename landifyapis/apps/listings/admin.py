@@ -150,7 +150,7 @@ class ListingCategoryAdmin(admin.ModelAdmin):
     list_select_related = ('listing_type', 'property_type')
 
     # Sử dụng widget filter_horizontal cho trường ManyToMany
-    filter_horizontal = ('applicable_features','applicable_unit_prices')
+    filter_horizontal = ('applicable_features',)
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)

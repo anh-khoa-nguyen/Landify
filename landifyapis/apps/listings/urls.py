@@ -18,10 +18,9 @@ ONE_HOUR = 60 * 60
 # ===============================================
 
 urlpatterns = [
-    path('listings/creation-options/', views.ListingCreationOptionsView.as_view(), name='listing-creation-options'),
+    path('listings/options/', views.ListingOptionsView.as_view(), name='listing-options'),
     #path('listings/creation-options/', cache_page(ONE_HOUR)(views.ListingCreationOptionsView.as_view()), name='listing-creation-options'),
 
-    path('listings/filter-options/', views.ListingFilterOptionsView.as_view(), name='listing-filter-options'),
     path('', include(router.urls)),
     path('', include(listings_router.urls)),
 ]

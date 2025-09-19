@@ -197,7 +197,7 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     Nó bao gồm các trường lồng nhau và các trường ảo được định dạng đẹp.
     """
     public_id = serializers.SerializerMethodField()
-    user = UserSerializer(read_only=True, fields=("id", "get_full_name"))
+    user = UserSerializer(read_only=True)
     property = PropertySerializer(read_only=True)
 
     # Hiển thị tên thay vì ID

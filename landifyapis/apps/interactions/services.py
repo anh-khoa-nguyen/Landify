@@ -16,6 +16,9 @@ from apps.common.services import BusinessLogicError
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import Distance
 
+from ..common.utils import firebase
+
+
 # ==============================================================================
 # APPOINTMENT SERVICES (DỊCH VỤ LỊCH HẸN)
 # ==============================================================================
@@ -180,10 +183,11 @@ def toggle_wishlist_item(*, user: User, listing: Listing) -> Tuple[str, Wishlist
 def get_or_create_private_chat(*, user1: User, user2: User, listing: Listing = None) -> tuple[Chat, bool]:
     """
     Tìm hoặc tạo một cuộc trò chuyện RIÊNG TƯ giữa 2 người.
+    VÀ đồng bộ lên Firestore nếu một cuộc trò chuyện MỚI được tạo.
     """
     # Tìm một chat có type=PRIVATE, có đúng 2 người tham gia,
     # và 2 người đó chính là user1 và user2.
-    chat = Chat.objects.annotate(
+    chat_qs = Chat.objects.annotate(
         num_participants=Count('participants')
     ).filter(
         chat_type=Chat.ChatType.PRIVATE,
@@ -195,18 +199,34 @@ def get_or_create_private_chat(*, user1: User, user2: User, listing: Listing = N
 
     # Lọc thêm theo listing nếu có
     if listing:
-        chat = chat.filter(listing=listing)
+        chat_qs = chat_qs.filter(listing=listing)
 
     # Nếu tìm thấy, trả về chat đó
-    if chat.exists():
-        return chat.first(), False
+    chat = chat_qs.first()
+    if chat:
+        return chat, False
 
-    # Nếu không, tạo chat mới
-    new_chat = Chat.objects.create(
-        chat_type=Chat.ChatType.PRIVATE,
-        listing=listing
-    )
-    new_chat.participants.add(user1, user2)
+    # Nếu không, tạo chat mới trong một transaction
+    with transaction.atomic():
+        new_chat = Chat.objects.create(
+            chat_type=Chat.ChatType.PRIVATE,
+            listing=listing
+        )
+        new_chat.participants.add(user1, user2)
+
+        # === PHẦN THÊM MỚI QUAN TRỌNG NHẤT ===
+        # Sau khi commit thành công vào Postgres, mới tạo document trên Firestore.
+        # Điều này đảm bảo tính nhất quán của dữ liệu.
+        transaction.on_commit(
+            lambda: firebase.create_firestore_chat_session(
+                postgres_chat_id=new_chat.id,
+                user1=user1,
+                user2=user2,
+                listing_title=listing.title if listing else "cuộc trò chuyện"
+            )
+        )
+        # ======================================
+
     return new_chat, True
 
 def create_group_chat(*, owner: User, participants: list[User], name: str, listing: Listing = None) -> Chat:

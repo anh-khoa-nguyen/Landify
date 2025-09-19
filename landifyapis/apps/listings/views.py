@@ -23,7 +23,6 @@ from .models import Property, Listing, VipType, ListingType, UserPromotion, List
 from .filters import ListingFilter
 from . import services as listing_services
 from .serializers import ListingPreviewSerializer, ListingDetailSerializer, ListingCreateSerializer
-from .option_serializers import FilterableFeatureSerializer # Import từ vị trí mới
 
 from apps.moderation.serializers import ProtestSerializer
 from apps.common.utils import hashids
@@ -85,13 +84,71 @@ class ListingViewSet(viewsets.ModelViewSet):
             'unit_price',
             'vip_status__vip_type',  # Tối ưu cho việc lấy tag VIP
         )
+        .annotate(
+            user_follower_count=Count('user__follower_set', distinct=True),
+            user_following_count=Count('user__following_set', distinct=True),
+        )
         .prefetch_related(
             'feature_values__feature',
             'property__media',
         )
+        .order_by('-created_date')  # Mặc định sắp xếp theo ngày tạo mới nhất
     )
 
     lookup_field = "public_id"
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+
+        # 1. Tối ưu hóa: Lấy tất cả các feature codes và types cần thiết trong 1 query
+        feature_params = {}
+        for key in self.request.query_params:
+            if key.startswith('features__'):
+                parts = key.split('__')
+                if len(parts) == 3:
+                    feature_params[parts[1]] = None  # Chỉ cần lấy code
+
+        if not feature_params:
+            return queryset  # Trả về sớm nếu không có filter feature nào
+
+        features_map = {
+            f.code: f.feature_type
+            for f in PropertyFeature.objects.filter(code__in=feature_params.keys())
+        }
+
+        # 2. Xử lý các bộ lọc feature động với kiểu dữ liệu chính xác
+        for key, value in self.request.query_params.items():
+            if key.startswith('features__'):
+                parts = key.split('__')
+                if len(parts) == 3:
+                    feature_code = parts[1]
+                    lookup_expr = parts[2]
+
+                    feature_type = features_map.get(feature_code)
+                    if not feature_type:
+                        continue  # Bỏ qua nếu feature_code không hợp lệ
+
+                    # 3. Chuyển đổi kiểu dữ liệu thông minh
+                    processed_value = value
+                    if feature_type == PropertyFeature.FeatureType.BOOLEAN:
+                        if value.lower() == 'true':
+                            processed_value = True
+                        elif value.lower() == 'false':
+                            processed_value = False
+                    elif feature_type == PropertyFeature.FeatureType.FLOAT:
+                        try:
+                            processed_value = float(value)
+                        except (ValueError, TypeError):
+                            return queryset.none()
+                    # Các kiểu khác (TEXT, DIRECTION...) giữ nguyên là chuỗi/số từ URL
+
+                    q_object = Q(
+                        feature_values__feature__code=feature_code,
+                        **{f'feature_values__value__{lookup_expr}': processed_value}
+                    )
+                    queryset = queryset.filter(q_object)
+
+        return queryset.distinct()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -181,54 +238,48 @@ class ListingViewSet(viewsets.ModelViewSet):
     #         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(methods=["post"], detail=True, url_path="wishlist")
-    def wishlist(self, request, pk=None):
+    def wishlist(self, request, public_id=None):
         """
         Thêm/Xóa (toggle) tin đăng này vào danh sách yêu thích của người dùng.
         """
-        # 1. Lấy đối tượng Listing dựa trên public_id từ URL
-        # Lưu ý: Vì action này nằm trong UserViewSet, chúng ta cần get_object_or_404 cho Listing
-        listing = get_object_from_public_id_or_404(Listing.objects, pk)
+        listing = get_object_from_public_id_or_404(Listing.objects, public_id)
         user = request.user
 
-        # 2. Gọi service để xử lý toàn bộ logic nghiệp vụ
         try:
-            status, wishlist_item = interactions_services.toggle_wishlist_item(
+            # Đổi tên biến cục bộ để tránh che mất module `status`
+            toggle_status, wishlist_item = interactions_services.toggle_wishlist_item(
                 user=user,
                 listing=listing
             )
 
-            # 3. Trả về response dựa trên kết quả từ service
-            if status == "added":
+            if toggle_status == "added":
                 serializer = WishlistSerializer(wishlist_item, context={'request': request})
                 return Response({
                     "status": "added",
                     "message": "Đã thêm vào danh sách yêu thích.",
                     "wishlist_item": serializer.data
+                    # Sử dụng module `status` của DRF một cách tường minh
                 }, status=status.HTTP_201_CREATED)
-            else:  # status == "removed"
+            else:  # toggle_status == "removed"
                 return Response({
                     "status": "removed",
                     "message": "Đã xóa khỏi danh sách yêu thích."
+                    # Sử dụng module `status` của DRF một cách tường minh
                 }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            # Bắt các lỗi không lường trước
             return Response(
                 {"error": f"Đã có lỗi xảy ra: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        except Exception as e:
-            return Response(
-                {"error": f"Đã có lỗi xảy ra: {str(e)}"},
+                # Sử dụng module `status` của DRF một cách tường minh
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     @action(methods=["get"], detail=False, url_path="potential")
     def potential(self, request):
         """
-        Gợi ý các tin đăng tiềm năng nhất dựa trên vị trí và nhiều yếu tố khác.
-        Yêu cầu các tham số query: 'lat' (vĩ độ) và 'lng' (kinh độ).
+        Gợi ý các tin đăng tiềm năng nhất, có thể có hoặc không có bộ lọc.
+        - Trang chủ sẽ gọi: /api/listings/potential/?lat=...&lng=...
+        - Trang tìm kiếm sẽ gọi: /api/listings/potential/?lat=...&lng=...&beds=3&min_price=...
         """
         try:
             lat = float(request.query_params.get('lat'))
@@ -240,16 +291,21 @@ class ListingViewSet(viewsets.ModelViewSet):
             )
 
         # Gọi service để lấy queryset đã được tính điểm và sắp xếp
-        potential_listings_qs = listing_services.find_potential_listings(latitude=lat, longitude=lng)
+        filters = request.query_params.dict()
 
-        # Phân trang và trả về kết quả
+        potential_listings_qs = listing_services.find_potential_listings(
+            latitude=lat,
+            longitude=lng,
+            filters=filters
+        )
+
         page = self.paginate_queryset(potential_listings_qs)
         if page is not None:
-            # Dùng ListingPreviewSerializer, nó sẽ tự động lấy trường 'potential_score'
-            serializer = self.get_serializer(page, many=True, context={'request': request})
+            # Dùng ListingPreviewSerializer, nó sẽ tự động lấy các trường đã annotate
+            serializer = ListingPreviewSerializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
 
-        serializer = self.get_serializer(potential_listings_qs, many=True, context={'request': request})
+        serializer = ListingPreviewSerializer(potential_listings_qs, many=True, context={'request': request})
         return Response(serializer.data)
 
 # ==============================================================================
@@ -257,63 +313,14 @@ class ListingViewSet(viewsets.ModelViewSet):
 # ==============================================================================
 # Các API View này cung cấp dữ liệu cần thiết cho frontend để xây dựng
 # giao diện người dùng, chẳng hạn như các tùy chọn cho bộ lọc và form tạo tin.
-class ListingFilterOptionsView(APIView):
+
+class ListingOptionsView(APIView):
     """
-    Cung cấp TOÀN BỘ dữ liệu cần thiết để xây dựng giao diện BỘ LỌC NÂNG CAO.
-    API này sử dụng một trường feature duy nhất (`applicable_features`) cho cả
-    form đăng tin và bộ lọc.
-    """
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request, format=None):
-        # 1. Lấy các bộ lọc chung từ CSDL
-        cities = City.objects.filter(is_popular=True).order_by('name')
-        listing_types = ListingType.objects.filter(active=True)
-
-        # 2. Lấy tất cả các category và prefetch các feature liên quan của chúng
-        categories = ListingCategory.objects.filter(active=True).prefetch_related('applicable_features')
-
-        # 3. Xây dựng cấu trúc dữ liệu cho các bộ lọc đặc thù
-        #    Đây là phần logic chính, nhóm các feature theo ID của category
-        specific_filters_by_category = {}
-        for category in categories:
-            # Key là ID của category, value là danh sách các feature đã được serialize
-            serialized_features = FilterableFeatureSerializer(category.applicable_features, many=True).data
-            specific_filters_by_category[category.id] = serialized_features
-
-        # 4. Xây dựng các lựa chọn tĩnh cho khoảng giá
-        price_ranges_rent = [
-            {'min': 0, 'max': 5000000, 'label': 'Dưới 5 triệu'},
-            {'min': 5000000, 'max': 10000000, 'label': '5 - 10 triệu'},
-            {'min': 10000000, 'max': 20000000, 'label': '10 - 20 triệu'},
-            {'min': 20000000, 'max': 0, 'label': 'Trên 20 triệu'},
-        ]
-        price_ranges_sell = [
-            {'min': 0, 'max': 1000000000, 'label': 'Dưới 1 tỷ'},
-            {'min': 1000000000, 'max': 3000000000, 'label': '1 - 3 tỷ'},
-            {'min': 3000000000, 'max': 5000000000, 'label': '3 - 5 tỷ'},
-            {'min': 5000000000, 'max': 0, 'label': 'Trên 5 tỷ'},
-        ]
-
-        # 5. Gom tất cả dữ liệu vào response cuối cùng
-        data = {
-            # --- CÁC BỘ LỌC CHUNG ---
-            'cities': [{'code': c.code, 'name': c.name} for c in cities],
-            'listing_types': [{'code': lt.code, 'name': lt.name} for lt in listing_types],
-            'price_ranges': {
-                'RENT': price_ranges_rent,
-                'BUY_SELL': price_ranges_sell,
-            },
-
-            # --- CÁC BỘ LỌC ĐẶC THÙ ---
-            'specific_filters_by_category': specific_filters
-        }
-        return Response(data)
-
-class ListingCreationOptionsView(APIView):
-    """
-    Cung cấp tất cả các dữ liệu lựa chọn cần thiết
-    cho việc tạo một tin đăng mới.
+    API DUY NHẤT cung cấp TẤT CẢ các dữ liệu lựa chọn.
+    Sử dụng tham số query `?context=` để tùy chỉnh response:
+    - `?context=create`: Dành cho form Đăng tin.
+    - `?context=filter`: Dành cho Bộ lọc Tìm kiếm.
+    - (Mặc định): Trả về tất cả.
     """
     permission_classes = [permissions.IsAuthenticated]  # Chỉ người dùng đăng nhập mới được tạo tin
 
@@ -323,6 +330,8 @@ class ListingCreationOptionsView(APIView):
         # unit_prices = UnitPrice.objects.all()  # Giả sử UnitPrice không có cờ active
         # property_features = PropertyFeature.objects.filter(active=True).order_by('category', 'name')
         vip_types = VipType.objects.filter(active=True).order_by('-sort_priority')
+        cities = City.objects.all().order_by('name')
+        listing_types = ListingType.objects.filter(active=True)
 
         valid_promotions = UserPromotion.objects.filter(
             user=request.user,
@@ -349,13 +358,46 @@ class ListingCreationOptionsView(APIView):
                 ListingCategoryOptionSerializer(category).data
             )
 
+        price_ranges_rent = [
+            {'min': 0, 'max': 5000000, 'label': 'Dưới 5 triệu'},
+            {'min': 5000000, 'max': 10000000, 'label': '5 - 10 triệu'},
+            {'min': 10000000, 'max': 20000000, 'label': '10 - 20 triệu'},
+            {'min': 20000000, 'max': 0, 'label': 'Trên 20 triệu'},
+        ]
+        price_ranges_sell = [
+            {'min': 0, 'max': 1000000000, 'label': 'Dưới 1 tỷ'},
+            {'min': 1000000000, 'max': 3000000000, 'label': '1 - 3 tỷ'},
+            {'min': 3000000000, 'max': 5000000000, 'label': '3 - 5 tỷ'},
+            {'min': 5000000000, 'max': 0, 'label': 'Trên 5 tỷ'},
+        ]
+
         # Serialize dữ liệu
-        data = {
+        all_data = {
             'grouped_categories': list(grouped_categories.values()),
             'directions': DirectionOptionSerializer(directions, many=True).data,
             'legal_statuses': LegalStatusOptionSerializer(legal_statuses, many=True).data,
             'vip_types': VipTypeOptionSerializer(vip_types, many=True).data,
             'promotions': UserPromotionOptionSerializer(valid_promotions, many=True).data,
+            'cities': [{'code': c.code, 'name': c.name} for c in cities],
+            'listing_types': [{'code': lt.code, 'name': lt.name} for lt in listing_types],
+            'price_ranges': {
+                'RENT': price_ranges_rent,
+                'BUY_SELL': price_ranges_sell,
+            },
         }
 
-        return Response(data, status=status.HTTP_200_OK)
+        context = request.query_params.get('context')
+
+        if context == 'create':
+            # Nếu là context "tạo tin", loại bỏ các trường của "filter"
+            keys_to_remove = ['cities', 'listing_types', 'price_ranges']
+            for key in keys_to_remove:
+                all_data.pop(key, None)
+
+        elif context == 'filter':
+            # Nếu là context "lọc tin", loại bỏ các trường của "create"
+            keys_to_remove = ['vip_types', 'promotions']
+            for key in keys_to_remove:
+                all_data.pop(key, None)
+
+        return Response(all_data, status=status.HTTP_200_OK)

@@ -9,14 +9,15 @@ from apps.common.mixins import DynamicFieldsMixin
 
 from .models import Subscription, User
 from . import services as accounts_services # Đổi tên để tránh trùng lặp với module 'accounts'
-from .serializers import UserCreateSerializer, UserSerializer, UserUpdateSerializer, UserProfileSerializer, UserProfileDetailSerializer
+from .serializers import UserCreateSerializer, UserSerializer, UserUpdateSerializer, UserProfileSerializer, \
+    UserProfileDetailSerializer, UserProfileDescriptionSerializer
 
 from apps.listings.serializers import ListingPreviewSerializer
 from apps.interactions.serializers import WishlistSerializer
 from ..interactions.models import Wishlist, Cooperation, Review
 from ..listings.models import Listing
 
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.contrib.contenttypes.models import ContentType
 from apps.social.models import Post, Comment
 from apps.moderation.models import Report
@@ -44,7 +45,10 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     ViewSet để quản lý người dùng: đăng ký, xem thông tin, cập nhật, theo dõi.
     """
-    queryset = User.objects.filter(is_active=True).select_related('profile').prefetch_related('follower_set', 'following_set')
+    queryset = User.objects.filter(is_active=True).select_related('profile').annotate(
+        follower_count=Count('follower_set', distinct=True),
+        following_count=Count('following_set', distinct=True)
+    )
 
     def get_serializer_class(self):
         if self.action == 'current_user':
@@ -97,6 +101,23 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({"avatar_url": new_url}, status=status.HTTP_200_OK)
         except BusinessLogicError as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(methods=["patch"], detail=False, url_path="update-description")
+    def update_description(self, request):
+        """
+        Cho phép người dùng đang đăng nhập cập nhật trường 'description' trong hồ sơ của họ.
+        """
+        user = request.user
+        profile = user.profile
+
+        # Sử dụng serializer mới để validate và cập nhật
+        serializer = UserProfileDescriptionSerializer(instance=profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        # Trả về thông tin User đã được cập nhật (bao gồm cả profile)
+        # để client có thể cập nhật UI ngay lập tức.
+        return Response(UserSerializer(user, context={'request': request}).data, status=status.HTTP_200_OK)
 
     @accounts_docs.toggle_follow_schema
     @action(methods=["post"], detail=True, url_path="follow")

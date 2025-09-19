@@ -77,6 +77,14 @@ class UserUpdateSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
                 profile.save()
         return instance
 
+class UserProfileDescriptionSerializer(serializers.ModelSerializer):
+    """
+    Serializer chuyên dụng chỉ để cập nhật trường `description` của UserProfile.
+    """
+    class Meta:
+        model = UserProfile
+        fields = ['description']
+
 
 class UserCreateSerializer(serializers.ModelSerializer):
     """Serializer riêng cho việc tạo người dùng mới."""
@@ -147,3 +155,4 @@ class SubscriptionSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         model = Subscription
         fields = "__all__"
         read_only_fields = ["follower", "following"]
+

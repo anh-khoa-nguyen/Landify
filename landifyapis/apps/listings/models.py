@@ -64,12 +64,6 @@ class ListingCategory(BaseModel):
         verbose_name="Các đặc điểm áp dụng"
     )
 
-    applicable_unit_prices = models.ManyToManyField(
-        'UnitPrice',
-        blank=True,
-        verbose_name="Các đơn vị giá áp dụng"
-    )
-
     # Thêm một property để tự động tạo ra tên hiển thị khi cần
     @property
     def display_name(self):
