@@ -32,12 +32,17 @@ class ListingFilter(django_filters.FilterSet):
     min_area = django_filters.NumberFilter(field_name="property__area", lookup_expr='gte')
     max_area = django_filters.NumberFilter(field_name="property__area", lookup_expr='lte')
 
+    listing_type_code = django_filters.CharFilter(
+        field_name='listing_category__listing_type__code',
+        label="Lọc theo mã loại tin đăng (BUY_SELL, RENT)"
+    )
+
     #amenities = django_filters.CharFilter(method='filter_by_amenities', label="Lọc theo nhiều tiện ích")
 
     class Meta:
         model = Listing
         # Các trường có thể lọc trực tiếp (nếu cần)
-        fields = ['listing_type__code']
+        fields = []
 
     def filter_by_keyword(self, queryset, name, value):
         keywords = [kw.strip() for kw in value.split(',') if kw.strip()]
@@ -63,7 +68,7 @@ class ListingFilter(django_filters.FilterSet):
         codes = [code.strip() for code in value.split(',') if code.strip()]
         if not codes:
             return queryset
-        return queryset.filter(property__property_type__code__in=codes)
+        return queryset.filter(listing_category__property_type__code__in=codes)
 
     def filter_by_direction(self, queryset, name, value):
         direction_codes = [code.strip() for code in value.split(',') if code.strip()]

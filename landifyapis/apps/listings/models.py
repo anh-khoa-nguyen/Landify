@@ -210,8 +210,12 @@ class Listing(BaseModel):
         Property, on_delete=models.CASCADE, related_name="listings", verbose_name="Bất động sản"
     )
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="listings", verbose_name="Người đăng tin")
-    listing_type = models.ForeignKey(
-        ListingType, on_delete=models.SET_NULL, null=True, verbose_name="Loại tin đăng (Bán/Thuê/Dự án)"
+    listing_category = models.ForeignKey(
+        ListingCategory,
+        on_delete=models.SET_NULL,
+        null=True,  # Cho phép null để không ảnh hưởng đến các tin đăng cũ
+        related_name="listings",
+        verbose_name="Danh mục tin đăng"
     )
     title = models.CharField(max_length=255, verbose_name="Tiêu đề")
     content = RichTextField(verbose_name="Nội dung")

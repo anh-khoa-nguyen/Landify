@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from vi_address.models import Ward
 from django.contrib.gis.geos import Point
+from rest_framework_gis.fields import GeometryField
 
 from apps.common.mixins import DynamicFieldsMixin
 from apps.common.frontend_maps import feature_maps
@@ -62,6 +63,8 @@ class LocationSerializer(serializers.ModelSerializer):
     ward_name = serializers.CharField(source="ward.name", read_only=True)
     district_name = serializers.CharField(source="district.name", read_only=True)
     city_name = serializers.CharField(source="city.name", read_only=True)
+
+    point = GeometryField(read_only=True)
 
     ward = serializers.PrimaryKeyRelatedField(
         queryset=Ward.objects.all(), write_only=True, required=True

@@ -75,7 +75,7 @@ class ListingAdmin(admin.ModelAdmin):
         "title",
         "user_link",
         "property_link",
-        "listing_type",
+        "listing_category",
         "status",
         "spam_check_status",
         "scam_score",
@@ -86,10 +86,17 @@ class ListingAdmin(admin.ModelAdmin):
         "active",
         "status",
         "spam_check_status",
-        "listing_type",
+        "listing_category",
         ("created_date", admin.DateFieldListFilter),
     )
-    search_fields = ("title", "user__username", "property__location__street")
+    search_fields = (
+        "title",
+        "user__username",
+        "property__location__street",
+        # THÊM: Cho phép tìm kiếm theo tên của category
+        "listing_category__listing_type__name",
+        "listing_category__property_type__name",
+    )
     readonly_fields = (
         "created_date",
         "updated_date",
@@ -101,6 +108,8 @@ class ListingAdmin(admin.ModelAdmin):
         ListingPropertyFeatureValueInline,
         ListingVipInline
     ]
+
+    list_select_related = ('user', 'property', 'listing_category')
 
     actions = ['make_active', 'make_inactive', 'mark_as_clean']
 

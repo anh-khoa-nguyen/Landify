@@ -8,12 +8,11 @@ from django.contrib.gis.geos import Point
 
 from apps.users.models import User, UserProfile
 from apps.properties.models import Location, Property, PropertyType
-# === THÊM IMPORT ListingCategory ===
-from apps.listings.models import Listing, ListingType, UnitPrice, ListingCategory
+from apps.listings.models import Listing, ListingType, UnitPrice, \
+    ListingCategory  # <<< Đảm bảo ListingCategory được import
 from vi_address.models import Ward
 
 
-# ... (các hàm normalize_string, find_best_ward_match, parse_price giữ nguyên) ...
 def normalize_string(s):
     if not s: return ""
     s = str(s).lower().strip()
@@ -76,7 +75,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("--- Bắt đầu di chuyển dữ liệu Nhà trọ/Phòng trọ ---"))
         self.stdout.write("Đang tải trước dữ liệu lookup...")
 
-        # === TẢI TRƯỚC CÁC OBJECT CẦN THIẾT ===
+        # ====================================================================
+        # === BẮT ĐẦU SỬA LỖI TẠI ĐÂY ===
+        # ====================================================================
         try:
             preloaded_wards = {
                 w: {'city': normalize_string(w.parent_code.parent_code.name),
@@ -86,13 +87,22 @@ class Command(BaseCommand):
             property_type_motel = PropertyType.objects.get(code='MOTEL_ROOM')
             listing_type_rent = ListingType.objects.get(code='RENT')
 
-            # Lấy đối tượng ListingCategory cho "Cho Thuê Nhà trọ, phòng trọ"
-            self.stdout.write(self.style.SUCCESS("Tải trước dữ liệu thành công."))
+            # 1. Tải trước đối tượng ListingCategory thay vì chỉ ListingType
+            self.motel_rent_category = ListingCategory.objects.get(
+                listing_type=listing_type_rent,
+                property_type=property_type_motel
+            )
 
-        except (PropertyType.DoesNotExist, ListingType.DoesNotExist) as e:
-            self.stdout.write(self.style.ERROR(f"LỖI: Không thể tải trước dữ liệu cần thiết: {e}"))
+            self.stdout.write(
+                self.style.SUCCESS(f"Đã tải thành công category: '{self.motel_rent_category.display_name}'"))
+
+        except (PropertyType.DoesNotExist, ListingType.DoesNotExist, ListingCategory.DoesNotExist) as e:
+            self.stdout.write(self.style.ERROR(
+                f"LỖI: Không thể tải trước dữ liệu cần thiết. Hãy chắc chắn rằng ListingCategory 'Cho Thuê Nhà trọ, phòng trọ' đã tồn tại. Lỗi: {e}"))
             return
-        # =======================================
+        # ====================================================================
+        # === KẾT THÚC SỬA LỖI ===
+        # ====================================================================
 
         migrated_count = 0
         skipped_count = 0
@@ -106,15 +116,14 @@ class Command(BaseCommand):
                 source_data = dict(zip(columns, row))
                 source_property_id = source_data.get('property_id')
 
-                # Kiểm tra xem Listing đã tồn tại chưa (dựa trên property_id cũ)
-                # Đây là một cách đơn giản để script có thể chạy lại mà không tạo dữ liệu trùng lặp
                 if Listing.objects.filter(property_id=source_property_id).exists():
                     skipped_count += 1
                     continue
 
                 try:
                     with transaction.atomic():
-                        # Xử lý User (giữ nguyên)
+                        # ... (Phần xử lý User, Location, Property giữ nguyên không đổi) ...
+                        # Xử lý User
                         raw_phone = source_data.get('phone')
                         phone_number = self._generate_full_phone_number(raw_phone)
                         if not phone_number or len(phone_number) < 9:
@@ -127,7 +136,7 @@ class Command(BaseCommand):
                         if user_created:
                             UserProfile.objects.create(user=user)
 
-                        # Xử lý Location (giữ nguyên)
+                        # Xử lý Location
                         ward_obj = find_best_ward_match(source_data.get('city'), source_data.get('district'),
                                                         source_data.get('ward'), preloaded_wards)
                         if not ward_obj:
@@ -149,7 +158,7 @@ class Command(BaseCommand):
                             point=point_obj
                         )
 
-                        # Xử lý Property (giữ nguyên)
+                        # Xử lý Property
                         property_obj = Property.objects.create(
                             id=source_property_id,
                             owner=user,
@@ -158,21 +167,25 @@ class Command(BaseCommand):
                             area=float(source_data.get('area', 0))
                         )
 
-                        # Xử lý Listing (CẬP NHẬT)
+                        # Xử lý Listing
                         price_val, unit_price_obj = parse_price(source_data.get('price'), source_data.get('unit_price'))
 
+                        # ====================================================================
+                        # === THAY ĐỔI QUAN TRỌNG KHI TẠO LISTING ===
+                        # ====================================================================
                         Listing.objects.create(
                             property=property_obj,
                             user=user,
-                            # === THAY ĐỔI QUAN TRỌNG: GÁN listing_category ===
-                            listing_type=listing_type_rent,
-                            # ===============================================
+                            # 2. Gán đối tượng ListingCategory đã được tải trước đó
+                            listing_category=self.motel_rent_category,
+                            # Bỏ trường listing_type đi vì nó không còn tồn tại trên model Listing
                             title=source_data.get('title', 'N/A')[:255],
                             content=source_data.get('description', ''),
                             price_value=price_val,
                             unit_price=unit_price_obj,
                             created_date=source_data.get('created_at', datetime.now()),
                         )
+                        # ====================================================================
 
                         migrated_count += 1
                         if migrated_count % 100 == 0:

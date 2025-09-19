@@ -201,7 +201,9 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     property = PropertySerializer(read_only=True)
 
     # Hiển thị tên thay vì ID
-    listing_type_name = serializers.CharField(source="listing_type.name", read_only=True)
+    listing_type_name = serializers.CharField(source="listing_category.listing_type.name", read_only=True, allow_null=True)
+    property_type_name = serializers.CharField(source="listing_category.property_type.name", read_only=True, allow_null=True)
+
     unit_price_name = serializers.CharField(source="unit_price.name", read_only=True, allow_null=True)
     unit_price_code = serializers.CharField(source="unit_price.code", read_only=True, allow_null=True)
 
@@ -219,8 +221,9 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "public_id",
             "user",
             "property",
-            "listing_type",
+            "listing_category",
             "listing_type_name",
+            "property_type_name",
             "title",
             "content",
             "price_value",
@@ -240,71 +243,70 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
 
     def get_price_analysis(self, obj: Listing) -> dict | None:
         """
-        Phân tích giá của tin đăng so với giá trung bình trong ô lưới địa lý tương ứng.
-        Dữ liệu trung bình được lấy từ bảng GeoGridStatistic đã được tính toán trước.
+        Phân tích giá của tin đăng so với giá trung bình trong ô lưới địa lý tương ứng,
+        dựa trên dữ liệu từ JSONField đã được tính toán trước.
         """
         # 1. Kiểm tra các điều kiện cần thiết
-        location = obj.property.location
-        if not location or not location.point or not obj.price_value:
-            return None  # Không có tọa độ hoặc giá thì không thể phân tích
+        if not all([obj.listing_category, obj.property.location, obj.property.location.point, obj.price_value,
+                    obj.unit_price]):
+            return None
 
-        # 2. Chuyển đổi tọa độ của BĐS thành ID của ô lưới
+        # 2. Lấy ô lưới và truy vấn bản ghi thống kê
+        location = obj.property.location
         cell_id = geogrid_converter.get_cell_id(location.point.y, location.point.x)
         if not cell_id:
             return None
 
         try:
-            # 3. Truy vấn cực nhanh đến bảng thống kê bằng khóa chính (cell_id)
-            stats = GeoGridStatistic.objects.get(pk=cell_id)
-
-            avg_price = None
-            unit_text = ""
-            area_name = "khu vực lân cận"  # Tên chung chung, không còn phụ thuộc Phường/Xã
-
-            # 4. Xác định loại hình để lấy đúng giá trung bình
-            listing_type_code = obj.listing_category.listing_type.code
-
-            # --- Trường hợp CHO THUÊ ---
-            if listing_type_code == 'RENT' and stats.avg_rent_price and stats.rent_listing_count > 1:
-                avg_price = stats.avg_rent_price
-                unit_text = "VND/tháng"
-
-            # --- Trường hợp MUA BÁN (chỉ xét giá /m²) ---
-            elif (listing_type_code == 'BUY_SELL' and
-                  obj.unit_price and obj.unit_price.code == 'PER_M2' and
-                  stats.avg_sell_price_per_m2 and stats.sell_listing_count > 1):
-                avg_price = stats.avg_sell_price_per_m2
-                unit_text = "/m²"
-
-            # Nếu không rơi vào các trường hợp trên, hoặc không có đủ dữ liệu (count <= 1)
-            if avg_price is None:
-                return {"message": "Chưa có đủ dữ liệu để so sánh giá tại khu vực này."}
-
-            # 5. Tính toán chênh lệch và đưa ra nhận định
-            difference = float(obj.price_value) - float(avg_price)
-            percentage = (difference / float(avg_price)) * 100
-
-            assessment = "tương đương"
-            if percentage > 15:
-                assessment = "cao hơn đáng kể"
-            elif percentage > 5:
-                assessment = "cao hơn một chút"
-            elif percentage < -15:
-                assessment = "thấp hơn đáng kể"
-            elif percentage < -5:
-                assessment = "thấp hơn một chút"
-
-            # 6. Định dạng kết quả trả về cho frontend
-            return {
-                "area_name": area_name,
-                "average_price_formatted": f"{intcomma(int(avg_price))} {unit_text}",
-                "difference_percentage": round(percentage, 1),
-                "assessment": assessment,
-                "listing_count": stats.rent_listing_count if listing_type_code == 'RENT' else stats.sell_listing_count,
-            }
-
+            stats_record = GeoGridStatistic.objects.get(pk=cell_id)
+            stats_json = stats_record.stats_by_category
         except GeoGridStatistic.DoesNotExist:
             return {"message": "Chưa có đủ dữ liệu để so sánh giá tại khu vực này."}
+
+        # 3. Lấy đúng dữ liệu thống kê bằng listing_category_id
+        category_id_key = str(obj.listing_category_id)
+        category_stats = stats_json.get(category_id_key)
+
+        # 4. Kiểm tra xem có dữ liệu thống kê cho danh mục này không
+        if not category_stats or category_stats.get("count", 0) <= 1:
+            return {"message": "Chưa có đủ dữ liệu để so sánh giá cho loại hình này tại khu vực này."}
+
+        # 5. Lấy giá trung bình và xác định đơn vị
+        avg_price = category_stats.get("avg_price")
+        if avg_price is None:
+            return None  # Trường hợp dữ liệu không nhất quán
+
+        unit_text = ""
+        listing_type_code = obj.listing_category.listing_type.code
+        unit_price_code = obj.unit_price.code
+
+        if listing_type_code == 'RENT':
+            unit_text = "VND/tháng"
+        elif listing_type_code == 'BUY_SELL' and unit_price_code == 'PER_M2':
+            unit_text = "/m²"
+
+        # 6. Tính toán chênh lệch và đưa ra nhận định
+        difference = float(obj.price_value) - float(avg_price)
+        percentage = (difference / float(avg_price)) * 100
+
+        assessment = "tương đương"
+        if percentage > 15:
+            assessment = "cao hơn đáng kể"
+        elif percentage > 5:
+            assessment = "cao hơn một chút"
+        elif percentage < -15:
+            assessment = "thấp hơn đáng kể"
+        elif percentage < -5:
+            assessment = "thấp hơn một chút"
+
+        # 7. Định dạng kết quả trả về cho frontend
+        return {
+            "area_name": "khu vực lân cận",
+            "average_price_formatted": f"{intcomma(int(avg_price))} {unit_text}".strip(),
+            "difference_percentage": round(percentage, 1),
+            "assessment": assessment,
+            "listing_count": category_stats.get("count"),
+        }
 
 # ==============================================================================
 # SERIALIZER GHI DỮ LIỆU (CREATE / UPDATE)

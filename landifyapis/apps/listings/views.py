@@ -80,9 +80,11 @@ class ListingViewSet(viewsets.ModelViewSet):
         .select_related(
             'user__profile',
             'property__location__ward__parent_code__parent_code',
-            'listing_type',
+            # Sửa đường dẫn truy vấn để đi qua listing_category
+            'listing_category__listing_type',
+            'listing_category__property_type',
             'unit_price',
-            'vip_status__vip_type',  # Tối ưu cho việc lấy tag VIP
+            'vip_status__vip_type',
         )
         .annotate(
             user_follower_count=Count('user__follower_set', distinct=True),
@@ -92,7 +94,7 @@ class ListingViewSet(viewsets.ModelViewSet):
             'feature_values__feature',
             'property__media',
         )
-        .order_by('-created_date')  # Mặc định sắp xếp theo ngày tạo mới nhất
+        .order_by('-created_date')
     )
 
     lookup_field = "public_id"
@@ -182,16 +184,10 @@ class ListingViewSet(viewsets.ModelViewSet):
         # 2. Lấy dữ liệu đã được validate
         validated_data = serializer.validated_data
 
-        # 3. Tách các thông tin cần thiết để gọi service
-        # Nhờ PrimaryKeyRelatedField, 'listing_category' giờ là một object đầy đủ
-        category = validated_data.pop('listing_category')
-
         # 4. Gọi đến service để thực hiện toàn bộ logic nghiệp vụ phức tạp
         try:
             new_listing = listing_services.create_full_listing(
                 user=request.user,
-                listing_type=category.listing_type,
-                property_type=category.property_type,
                 validated_data=validated_data
             )
         except BusinessLogicError as e:

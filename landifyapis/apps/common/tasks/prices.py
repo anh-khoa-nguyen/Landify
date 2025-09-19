@@ -15,74 +15,90 @@ logger = logging.getLogger(__name__)
 def update_geogrid_statistics():
     logger.info("Bắt đầu tác vụ: Cập nhật thống kê giá theo lưới địa lý...")
 
-    try:
-        rent_type = ListingType.objects.get(code='RENT')
-        sell_type = ListingType.objects.get(code='BUY_SELL')
-        per_m2_unit = UnitPrice.objects.get(code='PER_M2')
-    except Exception as e:
-        logger.error(f"LỖI: Không thể tải dữ liệu gốc: {e}. Dừng tác vụ.")
-        return
-
-    # 1. Lấy tất cả tin đăng có tọa độ và giá
-    listings_with_coords = Listing.objects.filter(
+    # 1. Lấy tất cả tin đăng có đủ thông tin cần thiết
+    listings_with_data = Listing.objects.filter(
         active=True,
         property__location__point__isnull=False,
-        price_value__isnull=False
+        price_value__isnull=False,
+        listing_category__isnull=False,  # Chỉ lấy các tin có category
+        unit_price__isnull=False,  # Chỉ lấy các tin có đơn vị giá
     ).select_related(
-        'listing_type',
-        'property__property_type',  # Thêm property_type vào select_related
+        'listing_category__listing_type',
+        'listing_category__property_type',
         'unit_price',
         'property__location'
     ).values(
         'price_value',
-        'listing_type__code',  # Truy vấn trực tiếp từ listing_type
-        # 'property__property_type__code' # Không cần lấy ở đây, sẽ xử lý sau
+        'listing_category_id',
+        'listing_category__listing_type__code',
+        'listing_category__property_type__code',
         'unit_price__code',
         'property__location__point'
     )
 
     # 2. Nhóm các tin đăng vào các ô lưới trong bộ nhớ
-    grid_data = defaultdict(lambda: {'rent_prices': [], 'sell_prices_m2': []})
-    for listing in listings_with_coords:
+    # Cấu trúc: { cell_id: { category_id: { 'prices': [...], 'type_code': '...', 'prop_code': '...' } } }
+    grid_data = defaultdict(lambda: defaultdict(lambda: {
+        'prices': [],
+        'listing_type_code': None,
+        'property_type_code': None,
+    }))
+
+    for listing in listings_with_data:
         point = listing['property__location__point']
         cell_id = geogrid_converter.get_cell_id(point.y, point.x)
         if not cell_id:
             continue
 
-        listing_type_code = listing['listing_type__code']
+        category_id = listing['listing_category_id']
         unit_price_code = listing['unit_price__code']
 
-        if listing_type_code == 'RENT':
-            grid_data[cell_id]['rent_prices'].append(float(listing['price_value']))
-        elif listing_type_code == 'BUY_SELL' and unit_price_code == 'PER_M2':
-            grid_data[cell_id]['sell_prices_m2'].append(float(listing['price_value']))
+        # Chỉ xử lý các tin "Cho thuê" hoặc "Mua bán" có giá /m²
+        if listing['listing_category__listing_type__code'] == 'RENT' or \
+                (listing['listing_category__listing_type__code'] == 'BUY_SELL' and unit_price_code == 'PER_M2'):
+
+            grid_data[cell_id][category_id]['prices'].append(float(listing['price_value']))
+            # Lưu lại code để ghi vào JSON
+            if not grid_data[cell_id][category_id]['listing_type_code']:
+                grid_data[cell_id][category_id]['listing_type_code'] = listing['listing_category__listing_type__code']
+                grid_data[cell_id][category_id]['property_type_code'] = listing['listing_category__property_type__code']
 
     # 3. Tính toán và chuẩn bị để cập nhật CSDL
     stats_to_update = []
-    for cell_id, data in grid_data.items():
+    for cell_id, categories in grid_data.items():
         center_lat, center_lng = geogrid_converter.get_cell_center(cell_id)
 
-        avg_rent = sum(data['rent_prices']) / len(data['rent_prices']) if data['rent_prices'] else None
-        avg_sell = sum(data['sell_prices_m2']) / len(data['sell_prices_m2']) if data['sell_prices_m2'] else None
+        stats_payload = {}
+        for category_id, data in categories.items():
+            if data['prices']:
+                avg_price = sum(data['prices']) / len(data['prices'])
 
-        stats_to_update.append(
-            GeoGridStatistic(
-                grid_cell_id=cell_id,
-                center_lat=center_lat,
-                center_lng=center_lng,
-                avg_rent_price=avg_rent,
-                rent_listing_count=len(data['rent_prices']),
-                avg_sell_price_per_m2=avg_sell,
-                sell_listing_count=len(data['sell_prices_m2']),
+                # Tạo key là string để tương thích JSON
+                category_key = str(category_id)
+
+                stats_payload[category_key] = {
+                    "avg_price": avg_price,
+                    "count": len(data['prices']),
+                    "listing_type_code": data['listing_type_code'],
+                    "property_type_code": data['property_type_code'],
+                }
+
+        if stats_payload:  # Chỉ thêm vào danh sách nếu có dữ liệu để cập nhật
+            stats_to_update.append(
+                GeoGridStatistic(
+                    grid_cell_id=cell_id,
+                    center_lat=center_lat,
+                    center_lng=center_lng,
+                    stats_by_category=stats_payload
+                )
             )
-        )
 
     # 4. Cập nhật CSDL một cách hiệu quả
     if stats_to_update:
         GeoGridStatistic.objects.bulk_update_or_create(
             stats_to_update,
-            ['avg_rent_price', 'rent_listing_count', 'avg_sell_price_per_m2', 'sell_listing_count', 'center_lat',
-             'center_lng', 'last_updated'],
+            # Chỉ cần cập nhật các trường này
+            ['stats_by_category', 'center_lat', 'center_lng'],
             match_field='grid_cell_id'
         )
 

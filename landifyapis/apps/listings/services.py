@@ -78,67 +78,64 @@ def _update_or_create_vip_status(*, listing: listing_models.Listing, vip_package
 # Các hàm chịu trách nhiệm tạo mới hoặc cập nhật dữ liệu của tin đăng.
 
 def create_full_listing(
-    *,
-    user: property_models.User,
-    listing_type: listing_models.ListingType,
-    property_type: property_models.PropertyType,
-    validated_data: dict
+        *,
+        user: property_models.User,
+        validated_data: dict
 ) -> listing_models.Listing:
     """
     Tạo một tin đăng hoàn chỉnh, bao gồm cả việc tạo mới Property nếu cần.
     Hàm này được gọi bởi ListingCreateSerializer.
     """
-    # 1. Tách các dữ liệu lồng nhau ra khỏi validated_data
+    # 1. Tách các dữ liệu lồng nhau và các dữ liệu đặc biệt ra khỏi validated_data
+    listing_category_obj = validated_data.pop('listing_category')
+    property_data_nested = validated_data.pop("property", None)
     property_id = validated_data.pop("property_id", None)
-    property_data = validated_data.pop("property", None)
     features_data = validated_data.pop("features", None)
     vip_package_data = validated_data.pop("vip_package", None)
     promotion_code = validated_data.pop("promotion_code", None)
 
+    # `validated_data` lúc này chỉ còn chứa các trường của Listing (title, content, price_value, etc.)
+
     with transaction.atomic():
         property_obj = None
 
-        # Kịch bản 1: Người dùng cung cấp property_id để liên kết BĐS đã có
+        # Kịch bản 1: Liên kết với Bất động sản đã có
         if property_id:
             property_obj = property_id  # DRF đã chuyển nó thành object Property
             if property_obj.owner != user:
                 raise BusinessLogicError("Bạn không có quyền đăng tin cho bất động sản này.")
 
-        # Kịch bản 2: Người dùng cung cấp dữ liệu để tạo BĐS mới
-        elif property_data:
-            location_data = property_data.pop("location")
-
+        # Kịch bản 2: Tạo mới Bất động sản
+        elif property_data_nested:
+            location_data = property_data_nested.pop("location")
             latitude = location_data.pop('latitude', None)
             longitude = location_data.pop('longitude', None)
 
-            # 2. Tạo đối tượng Point nếu có tọa độ
             if latitude is not None and longitude is not None:
-                # Gán đối tượng Point vào key 'point' trong dictionary
                 location_data['point'] = Point(longitude, latitude, srid=4326)
 
-            # === THAY ĐỔI 2: SỬ DỤNG MODEL TỪ APP PROPERTIES ===
             location_obj = property_models.Location.objects.create(**location_data)
 
-            # Tạo Property mới với owner là người dùng hiện tại
+            # === SỬA LỖI QUAN TRỌNG NHẤT TẠI ĐÂY ===
+            # `property_data_nested` bây giờ chỉ chứa các trường của Property
+            # như `area`, `direction`, `legal_status`.
             property_obj = property_models.Property.objects.create(
                 owner=user,
                 location=location_obj,
-                property_type=property_type,
-                **property_data
+                property_type=listing_category_obj.property_type,
+                **property_data_nested  # Truyền dictionary đã được làm sạch
             )
+            # =======================================
 
-        # Nếu không có kịch bản nào xảy ra, ném lỗi
         if not property_obj:
-            raise BusinessLogicError(
-                "Không thể xác định hoặc tạo mới bất động sản. Vui lòng cung cấp 'property' hoặc 'property_id'.")
+            raise BusinessLogicError("Cần phải cung cấp 'property' (để tạo mới) hoặc 'property_id' (để liên kết).")
 
         # 3. Tạo đối tượng Listing chính
-        #    `validated_data` lúc này chỉ còn chứa các trường của Listing (title, content...)
         listing = listing_models.Listing.objects.create(
             user=user,
             property=property_obj,
-            listing_type=listing_type,  # Gán listing_type vào đây
-            **validated_data
+            listing_category=listing_category_obj,
+            **validated_data  # `validated_data` giờ chỉ còn các trường của Listing
         )
 
         if vip_package_data:

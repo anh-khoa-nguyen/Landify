@@ -39,6 +39,7 @@ class SiteStatistic(models.Model):
 class GeoGridStatistic(models.Model):
     """
     Model để lưu trữ thống kê giá BĐS đã được tính toán trước cho mỗi ô lưới địa lý.
+    Dữ liệu được lưu trong JSONField để có thể chứa thống kê cho nhiều ListingCategory.
     """
     objects = BulkUpdateOrCreateQuerySet.as_manager()
 
@@ -52,21 +53,30 @@ class GeoGridStatistic(models.Model):
     center_lat = models.FloatField(null=True)
     center_lng = models.FloatField(null=True)
 
-    # --- Thống kê cho thuê ---
-    avg_rent_price = models.DecimalField(
-        max_digits=19, decimal_places=2, null=True, blank=True,
-        verbose_name="Giá thuê trung bình (VND/tháng)"
+    # === TRƯỜNG DỮ LIỆU CHÍNH ĐÃ ĐƯỢC NÂNG CẤP ===
+    # stats_by_category sẽ có cấu trúc dạng:
+    # {
+    #   "27": {  // listing_category_id
+    #     "avg_price": 25000000.00,
+    #     "count": 15,
+    #     "listing_type_code": "RENT",
+    #     "property_type_code": "TOWNHOUSE"
+    #   },
+    #   "15": {
+    #     "avg_price_per_m2": 65000000.00,
+    #     "count": 8,
+    #     "listing_type_code": "BUY_SELL",
+    #     "property_type_code": "APARTMENT"
+    #   }
+    # }
+    stats_by_category = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Thống kê theo từng Danh mục"
     )
 
-    rent_listing_count = models.PositiveIntegerField(default=0, verbose_name="Số lượng tin cho thuê")
-
-    # --- Thống kê mua bán ---
-    avg_sell_price_per_m2 = models.DecimalField(
-        max_digits=19, decimal_places=2, null=True, blank=True,
-        verbose_name="Giá bán trung bình (/m²)"
-    )
-
-    sell_listing_count = models.PositiveIntegerField(default=0, verbose_name="Số lượng tin mua bán")
+    # Chúng ta vẫn có thể giữ lại các trường tổng hợp nếu muốn hiển thị nhanh
+    # hoặc có thể loại bỏ chúng để đơn giản hóa. Ở đây, tôi sẽ loại bỏ chúng.
 
     last_updated = models.DateTimeField(auto_now=True, verbose_name="Lần cuối cập nhật")
 
