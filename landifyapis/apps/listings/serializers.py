@@ -496,3 +496,77 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             )
         except UserPromotion.DoesNotExist:
             raise serializers.ValidationError("Mã khuyến mãi không hợp lệ hoặc đã hết hạn.")
+
+#===================AI===================
+class ListingAISerializer(ListingDetailSerializer):
+    """
+    Serializer chuyên dụng để tạo ra một "tài liệu" văn bản hoàn chỉnh
+    về một tin đăng, phục vụ cho việc phân tích của AI (ví dụ: chatbot RAG).
+    """
+    # Thêm các trường SerializerMethodField để "văn bản hóa" dữ liệu
+    full_address_text = serializers.SerializerMethodField()
+    features_text = serializers.SerializerMethodField()
+    summary_text = serializers.SerializerMethodField()
+
+    class Meta(ListingDetailSerializer.Meta):
+        # Kế thừa tất cả các trường từ cha và thêm các trường mới
+        fields = ListingDetailSerializer.Meta.fields + [
+            'full_address_text',
+            'features_text',
+            'summary_text'
+        ]
+
+    def get_full_address_text(self, obj: Listing) -> str:
+        """Tạo ra một chuỗi địa chỉ đầy đủ, dễ đọc."""
+        if not obj.property or not obj.property.location:
+            return "Không có thông tin địa chỉ."
+
+        loc = obj.property.location
+        parts = [
+            loc.street,
+            getattr(loc.ward, 'name', None),
+            getattr(loc.district, 'name', None),
+            getattr(loc.city, 'name', None)
+        ]
+        return ", ".join(filter(None, parts))  # Lọc ra các giá trị None và nối chuỗi
+
+    def get_features_text(self, obj: Listing) -> str:
+        """Tạo ra một chuỗi tóm tắt các đặc điểm nổi bật."""
+        if not obj.feature_values.exists():
+            return "Không có thông tin về các đặc điểm chi tiết."
+
+        feature_texts = []
+        for fv in obj.feature_values.all():
+            # Sử dụng property `display_value` mà chúng ta đã tạo trong model
+            feature_texts.append(f"{fv.feature.name}: {fv.display_value}")
+
+        return ", ".join(feature_texts)
+
+    def get_summary_text(self, obj: Listing) -> str:
+        """
+        Tạo ra một đoạn văn bản tóm tắt toàn diện, là đầu vào chính cho AI.
+        Đây là phần quan trọng nhất.
+        """
+        # Sử dụng lại các phương thức đã có hoặc truy cập trực tiếp
+        property_type = self.get_property_type_name(obj)
+        address = self.get_full_address_text(obj)
+        area = obj.property.area if obj.property else "Không rõ"
+        direction = obj.property.direction.name if obj.property and obj.property.direction else "Không rõ"
+        legal_status = obj.property.legal_status.name if obj.property and obj.property.legal_status else "Chưa xác định"
+        features = self.get_features_text(obj)
+
+        # Trích xuất nội dung text từ trường RichTextField
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(obj.content, "html.parser")
+        content_text = soup.get_text(separator=' ', strip=True)
+
+        # Ghép tất cả lại thành một đoạn văn tự nhiên
+        summary = (
+            f"Đây là một tin đăng về bất động sản loại '{property_type}' với tiêu đề '{obj.title}'.\n"
+            f"Vị trí: {address}.\n"
+            f"Thông tin giá: {obj.display_price}.\n"
+            f"Thông số cơ bản: Diện tích {area} m², Hướng chính: {direction}, Pháp lý: {legal_status}.\n"
+            f"Các đặc điểm chi tiết: {features}.\n"
+            f"Nội dung mô tả của người đăng: {content_text}"
+        )
+        return summary

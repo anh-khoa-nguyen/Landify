@@ -22,7 +22,7 @@ from apps.common import perms, tasks
 from .models import Property, Listing, VipType, ListingType, UserPromotion, ListingCategory
 from .filters import ListingFilter
 from . import services as listing_services
-from .serializers import ListingPreviewSerializer, ListingDetailSerializer, ListingCreateSerializer
+from .serializers import ListingPreviewSerializer, ListingDetailSerializer, ListingCreateSerializer, ListingAISerializer
 
 from apps.moderation.serializers import ProtestSerializer
 from apps.common.utils import hashids
@@ -302,6 +302,16 @@ class ListingViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = ListingPreviewSerializer(potential_listings_qs, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=True, url_path="ai-summary")
+    def ai_summary(self, request, public_id=None):
+        """
+        Cung cấp một bản tóm tắt dạng văn bản hoàn chỉnh của tin đăng,
+        được tối ưu hóa để làm ngữ cảnh cho các mô hình AI.
+        """
+        listing = self.get_object()
+        serializer = ListingAISerializer(listing, context=self.get_serializer_context())
         return Response(serializer.data)
 
 # ==============================================================================
