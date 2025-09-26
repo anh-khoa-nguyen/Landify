@@ -15,12 +15,11 @@ from apps.common.tasks import notifications
 
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):
-    # --- CẬP NHẬT: Thêm link và mô tả ngắn ---
     list_display = (
         "id",
         "reporter",
-        "reported_object_link",  # <-- THAY ĐỔI: Dùng link
-        "short_description",  # <-- MỚI: Mô tả ngắn
+        "reported_object_link",
+        "short_description",
         "status",
         "created_date"
     )
@@ -35,7 +34,6 @@ class ReportAdmin(admin.ModelAdmin):
         "updated_date",
     )
 
-    # --- CẬP NHẬT: Thêm action mạnh mẽ hơn ---
     actions = ["mark_as_resolved", "mark_as_rejected", "take_down_and_resolve"]
 
     @admin.action(description=_('Đánh dấu đã giải quyết'))
@@ -108,7 +106,6 @@ class ProtestAdmin(admin.ModelAdmin):
         """
         Ghi đè để gửi thông báo cho người dùng khi trạng thái kháng nghị thay đổi.
         """
-        # 'change' is True if it's an update, 'status' in form.changed_data checks if that specific field was modified.
         if change and 'status' in form.changed_data:
             # Chỉ gửi thông báo khi trạng thái chuyển sang các trạng thái cuối cùng
             if obj.status in [Protest.Status.RESOLVED, Protest.Status.REJECTED]:

@@ -24,7 +24,6 @@ class PostViewSet(viewsets.ModelViewSet):
     Hỗ trợ CRUD cơ bản và hành động 'react'.
     """
 
-    # Tối ưu hóa queryset bằng cách tính toán sẵn comment_count và reaction_count
     queryset = models.Post.objects.annotate(comment_count=Count("comments"), reaction_count=Count("reactions")).filter(
         active=True
     )
@@ -61,12 +60,10 @@ class PostViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         reaction_type = serializer.validated_data["type"]
 
-        # Gọi service để xử lý toàn bộ logic nghiệp vụ
         status_code, reaction_obj = social_services.process_post_reaction(
             user=request.user, post=post, reaction_type=reaction_type
         )
 
-        # Trả về response dựa trên kết quả từ service
         if status_code == "created":
             return Response(ReactionSerializer(reaction_obj).data, status=status.HTTP_201_CREATED)
         elif status_code == "updated":
@@ -88,14 +85,13 @@ class CommentViewSet(viewsets.ModelViewSet):
         """Chỉ trả về các bình luận của bài đăng được chỉ định trong URL."""
         return models.Comment.objects.filter(post_id=self.kwargs.get("post_pk"), active=True).select_related(
             "user__profile"
-        )  # Tối ưu, lấy sẵn profile và avatar
+        )
 
     def get_permissions(self):
         if self.action in ["list", "retrieve"]:
             return [permissions.AllowAny()]
         if self.action == "create":
             return [permissions.IsAuthenticated()]
-        # Chỉ chủ sở hữu hoặc admin mới được sửa/xóa
         return [perms.IsOwnerOrAdmin()]
 
     def perform_create(self, serializer):

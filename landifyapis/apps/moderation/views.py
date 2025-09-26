@@ -28,10 +28,9 @@ class ReportViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.role == User.Role.ADMIN:
             return self.queryset
-        return self.queryset.filter(reporter=user)  # Người dùng chỉ xem báo cáo của mình
+        return self.queryset.filter(reporter=user)
 
     def perform_create(self, serializer):
-        # Serializer đã validate và thêm content_type vào data
         serializer.save(
             reporter=self.request.user,
             reported_item_type=serializer.validated_data['reported_item_type']
@@ -45,10 +44,8 @@ class ProtestViewSet(viewsets.ModelViewSet):
     serializer_class = ProtestSerializer
 
     def get_permissions(self):
-        # Người dùng thường có thể tạo và xem kháng nghị của mình
         if self.action in ['create', 'list', 'retrieve']:
             return [permissions.IsAuthenticated()]
-        # Admin có thể làm mọi thứ
         return [perms.IsAdmin()]
 
     def get_queryset(self):

@@ -37,15 +37,12 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
                 clock_skew_seconds=10
             )
         except Exception as e:
-            # Nếu xác thực thất bại dù đã có 'kid', thì đây là token Firebase giả mạo hoặc hết hạn
             raise exceptions.AuthenticationFailed(f"Token Firebase không hợp lệ: {e}")
 
         uid = decoded_token.get("uid")
         if not uid:
             raise exceptions.AuthenticationFailed("Token Firebase hợp lệ nhưng không chứa UID.")
 
-        # === LOGIC get_or_create CHO USER VẪN GIỮ NGUYÊN ===
-        # Logic này chỉ áp dụng cho luồng xác thực Firebase (tức là cho người dùng thường)
         try:
             user, created = User.objects.get_or_create(
                 firebase_uid=uid,

@@ -13,13 +13,10 @@ class HomepageStatsView(APIView):
 
     def get(self, request, format=None):
         try:
-            # Lấy giá trị từ model
             total_listings = SiteStatistic.objects.get(key='total_active_listings').value
         except SiteStatistic.DoesNotExist:
-            # Trả về 0 nếu chưa có dữ liệu
             total_listings = 0
 
-        # Định dạng số theo kiểu có dấu phẩy/chấm
         formatted_total = f"{total_listings:,}".replace(",", ".")
 
         data = {

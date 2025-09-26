@@ -62,17 +62,14 @@ from django.contrib.gis.measure import D
 @listings_docs.listing_viewset_schema
 class ListingViewSet(viewsets.ModelViewSet):
     """ViewSet để quản lý Tin đăng."""
-    filter_backends = [DjangoFilterBackend] # Kích hoạt backend lọc
+    filter_backends = [DjangoFilterBackend]
     filterset_class = ListingFilter
     lookup_field = "public_id"
 
     def get_permissions(self):
-        # Cho phép bất kỳ ai cũng có thể xem danh sách và xem chi tiết
         if self.action in ['list', 'retrieve', 'search']:  # Thêm 'search' nếu bạn có action này
             return [permissions.AllowAny()]
 
-        # Đối với tất cả các action khác (create, update, destroy, wishlist, protest...),
-        # yêu cầu người dùng phải đăng nhập.
         return [permissions.IsAuthenticated()]
 
     queryset = (
@@ -80,7 +77,6 @@ class ListingViewSet(viewsets.ModelViewSet):
         .select_related(
             'user__profile',
             'property__location__ward__parent_code__parent_code',
-            # Sửa đường dẫn truy vấn để đi qua listing_category
             'listing_category__listing_type',
             'listing_category__property_type',
             'unit_price',
@@ -102,7 +98,6 @@ class ListingViewSet(viewsets.ModelViewSet):
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
 
-        # 1. Tối ưu hóa: Lấy tất cả các feature codes và types cần thiết trong 1 query
         feature_params = {}
         for key in self.request.query_params:
             if key.startswith('features__'):
@@ -111,14 +106,13 @@ class ListingViewSet(viewsets.ModelViewSet):
                     feature_params[parts[1]] = None  # Chỉ cần lấy code
 
         if not feature_params:
-            return queryset  # Trả về sớm nếu không có filter feature nào
+            return queryset
 
         features_map = {
             f.code: f.feature_type
             for f in PropertyFeature.objects.filter(code__in=feature_params.keys())
         }
 
-        # 2. Xử lý các bộ lọc feature động với kiểu dữ liệu chính xác
         for key, value in self.request.query_params.items():
             if key.startswith('features__'):
                 parts = key.split('__')
@@ -128,9 +122,8 @@ class ListingViewSet(viewsets.ModelViewSet):
 
                     feature_type = features_map.get(feature_code)
                     if not feature_type:
-                        continue  # Bỏ qua nếu feature_code không hợp lệ
+                        continue
 
-                    # 3. Chuyển đổi kiểu dữ liệu thông minh
                     processed_value = value
                     if feature_type == PropertyFeature.FeatureType.BOOLEAN:
                         if value.lower() == 'true':
@@ -142,7 +135,6 @@ class ListingViewSet(viewsets.ModelViewSet):
                             processed_value = float(value)
                         except (ValueError, TypeError):
                             return queryset.none()
-                    # Các kiểu khác (TEXT, DIRECTION...) giữ nguyên là chuỗi/số từ URL
 
                     q_object = Q(
                         feature_values__feature__code=feature_code,
@@ -156,12 +148,9 @@ class ListingViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return ListingCreateSerializer
 
-        # === THAY ĐỔI Ở ĐÂY ===
-        # Nếu action là 'list' (lấy danh sách), dùng PreviewSerializer
         if self.action == 'list' or self.action == 'search':
             return ListingPreviewSerializer
 
-        # Mặc định (cho 'retrieve' - lấy chi tiết), dùng DetailSerializer
         return ListingDetailSerializer
 
     def get_serializer_context(self):
@@ -177,27 +166,21 @@ class ListingViewSet(viewsets.ModelViewSet):
         """
         Ghi đè logic tạo mới để gọi đến service function.
         """
-        # 1. Khởi tạo serializer để validate dữ liệu đầu vào
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # 2. Lấy dữ liệu đã được validate
         validated_data = serializer.validated_data
 
-        # 4. Gọi đến service để thực hiện toàn bộ logic nghiệp vụ phức tạp
         try:
             new_listing = listing_services.create_full_listing(
                 user=request.user,
                 validated_data=validated_data
             )
         except BusinessLogicError as e:
-            # Bắt các lỗi nghiệp vụ từ service và trả về lỗi 400
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 5. Serialize kết quả trả về bằng serializer chi tiết
         response_serializer = ListingDetailSerializer(new_listing, context=self.get_serializer_context())
 
-        # 6. Trả về response thành công
         headers = self.get_success_headers(response_serializer.data)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -217,22 +200,6 @@ class ListingViewSet(viewsets.ModelViewSet):
         except BusinessLogicError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    # @listings_docs.protest_listing_schema
-    # @action(methods=["post"], detail=True)
-    # def protest(self, request, public_id=None): # <<< Đổi tên tham số cho nhất quán
-    #     """Người dùng kháng nghị khi tin đăng của họ bị từ chối/gắn cờ."""
-    #     listing = self.get_object()
-    #     serializer = ProtestSerializer(data=request.data)
-    #     serializer.is_valid(raise_exception=True)
-    #
-    #     try:
-    #         protest = listing_services.create_protest_for_listing(
-    #             listing=listing, protester=request.user, serializer=serializer
-    #         )
-    #         return Response(ProtestSerializer(protest).data, status=status.HTTP_201_CREATED)
-    #     except BusinessLogicError as e:
-    #         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
     @action(methods=["post"], detail=True, url_path="wishlist")
     def wishlist(self, request, public_id=None):
         """
@@ -242,7 +209,6 @@ class ListingViewSet(viewsets.ModelViewSet):
         user = request.user
 
         try:
-            # Đổi tên biến cục bộ để tránh che mất module `status`
             toggle_status, wishlist_item = interactions_services.toggle_wishlist_item(
                 user=user,
                 listing=listing
@@ -254,19 +220,16 @@ class ListingViewSet(viewsets.ModelViewSet):
                     "status": "added",
                     "message": "Đã thêm vào danh sách yêu thích.",
                     "wishlist_item": serializer.data
-                    # Sử dụng module `status` của DRF một cách tường minh
                 }, status=status.HTTP_201_CREATED)
             else:  # toggle_status == "removed"
                 return Response({
                     "status": "removed",
                     "message": "Đã xóa khỏi danh sách yêu thích."
-                    # Sử dụng module `status` của DRF một cách tường minh
                 }, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response(
                 {"error": f"Đã có lỗi xảy ra: {str(e)}"},
-                # Sử dụng module `status` của DRF một cách tường minh
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -286,7 +249,6 @@ class ListingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Gọi service để lấy queryset đã được tính điểm và sắp xếp
         filters = request.query_params.dict()
 
         potential_listings_qs = listing_services.find_potential_listings(
@@ -297,7 +259,6 @@ class ListingViewSet(viewsets.ModelViewSet):
 
         page = self.paginate_queryset(potential_listings_qs)
         if page is not None:
-            # Dùng ListingPreviewSerializer, nó sẽ tự động lấy các trường đã annotate
             serializer = ListingPreviewSerializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
 

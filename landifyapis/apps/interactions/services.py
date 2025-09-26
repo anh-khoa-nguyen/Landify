@@ -148,30 +148,14 @@ def rate_property_and_update_score(
         return review
 
 def toggle_wishlist_item(*, user: User, listing: Listing) -> Tuple[str, Wishlist | None]:
-    """
-    Xử lý logic thêm/xóa (toggle) một tin đăng vào danh sách yêu thích của người dùng.
-
-    Args:
-        user (User): Người dùng thực hiện hành động.
-        listing (Listing): Tin đăng được thêm/xóa.
-
-    Returns:
-        Một tuple chứa:
-        - Trạng thái ('added' hoặc 'removed').
-        - Đối tượng Wishlist (nếu được thêm) hoặc None (nếu bị xóa).
-    """
-    # get_or_create trả về một tuple (object, created)
-    # created là một boolean: True nếu object vừa được tạo, False nếu nó đã tồn tại.
     wishlist_item, created = Wishlist.objects.get_or_create(
         user=user,
         listing=listing
     )
 
     if created:
-        # Nếu vừa được TẠO MỚI (thêm vào)
         return "added", wishlist_item
     else:
-        # Nếu đã TỒN TẠI -> XÓA ĐI
         wishlist_item.delete()
         return "removed", None
 
@@ -214,9 +198,6 @@ def get_or_create_private_chat(*, user1: User, user2: User, listing: Listing = N
         )
         new_chat.participants.add(user1, user2)
 
-        # === PHẦN THÊM MỚI QUAN TRỌNG NHẤT ===
-        # Sau khi commit thành công vào Postgres, mới tạo document trên Firestore.
-        # Điều này đảm bảo tính nhất quán của dữ liệu.
         transaction.on_commit(
             lambda: firebase.create_firestore_chat_session(
                 postgres_chat_id=new_chat.id,
@@ -238,6 +219,7 @@ def create_group_chat(*, owner: User, participants: list[User], name: str, listi
         name=name,
         listing=listing
     )
+
     # Thêm người tạo và tất cả những người tham gia khác vào phòng
     all_participants = [owner] + participants
     chat.participants.set(all_participants)
@@ -245,8 +227,7 @@ def create_group_chat(*, owner: User, participants: list[User], name: str, listi
 
 # Hàm để lấy tất cả chat của một người dùng (cả riêng và nhóm)
 def get_all_chats_for_user(user: User):
-    # Sức mạnh của mô hình hợp nhất: một câu query duy nhất!
-    return user.chats.all().order_by('-last_message_timestamp') # Giả sử bạn có trường last_message_timestamp
+    return user.chats.all().order_by('-last_message_timestamp')
 
 #========================================================
 class CooperationActionError(BusinessLogicError):
@@ -261,16 +242,6 @@ def respond_to_cooperation_request(
 ) -> Cooperation:
     """
     Xử lý hành động chấp nhận hoặc từ chối một yêu cầu hợp tác.
-    Hàm này chứa toàn bộ logic nghiệp vụ và kiểm tra quyền.
-
-    Args:
-        cooperation (Cooperation): Đối tượng yêu cầu hợp tác cần xử lý.
-        actor (User): Người dùng thực hiện hành động (phải là chủ tin đăng).
-        action (str): Hành động cần thực hiện ('accept' hoặc 'reject').
-        reason (str, optional): Lý do từ chối. Defaults to None.
-
-    Returns:
-        Cooperation: Đối tượng hợp tác đã được cập nhật.
     """
         # 1. Kiểm tra quyền: Chỉ chủ tin đăng (owner) mới được phản hồi
     with transaction.atomic():

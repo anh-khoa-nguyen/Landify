@@ -19,16 +19,6 @@ def decode_public_id(public_id_str: str) -> int | None:
 def get_object_from_public_id_or_404(model_manager, public_id_str: str):
     """
     Một hàm tiện ích kết hợp việc giải mã public_id và lấy đối tượng từ DB.
-
-    Args:
-        model_manager: Trình quản lý của model (ví dụ: Listing.objects).
-        public_id_str (str): Chuỗi public_id cần giải mã và tra cứu.
-
-    Returns:
-        object: Đối tượng model được tìm thấy.
-
-    Raises:
-        Http404: Nếu public_id không hợp lệ hoặc không tìm thấy đối tượng.
     """
     real_pk = decode_public_id(public_id_str)
 

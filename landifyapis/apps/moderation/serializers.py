@@ -40,7 +40,6 @@ class ReportSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         real_id = None
         try:
             if type_name == Report.ItemType.LISTING:
-                # Nếu là tin đăng, giải mã public_id
                 real_id = hashids.decode_public_id(item_id_str)
                 if real_id is None:
                     raise serializers.ValidationError({"reported_item_id": "ID của tin đăng không hợp lệ."})
@@ -53,12 +52,11 @@ class ReportSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
 
             # Chuyển đổi tên model (vd: "listing") thành đối tượng ContentType
             content_type = ContentType.objects.get(model=type_name)
-            # Kiểm tra xem đối tượng có thực sự tồn tại không
             if not content_type.model_class().objects.filter(pk=real_id).exists():
                 raise serializers.ValidationError(
                     {"reported_item_id": f"Đối tượng '{type_name}' với ID '{item_id_str}' không tồn tại."}
                 )
-            # "Bơm" đối tượng ContentType vào data để lưu
+
             data['reported_item_type'] = content_type
             data['reported_item_id'] = real_id
 
@@ -92,4 +90,3 @@ class ProtestSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "created_date",
         ]
         read_only_fields = ["protester", "admin_reviewer", "status", "resolution_note", "action"]
-        # Trường 'listing' sẽ được ghi vào từ view/service, nên ở đây có thể để write_only

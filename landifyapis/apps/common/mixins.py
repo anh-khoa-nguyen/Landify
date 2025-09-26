@@ -9,8 +9,6 @@ class DynamicFieldsMixin:
         fields = kwargs.pop("fields", None)
         exclude = kwargs.pop("exclude", None)
 
-        # Rất quan trọng: gọi super().__init__ để đảm bảo __init__ của
-        # class cha (ví dụ: ModelSerializer) vẫn được thực thi.
         super().__init__(*args, **kwargs)
 
         if fields is not None:

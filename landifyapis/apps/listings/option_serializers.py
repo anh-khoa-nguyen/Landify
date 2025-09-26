@@ -28,7 +28,6 @@ class ListingCategoryOptionSerializer(serializers.ModelSerializer):
     """
     Serializer để hiển thị các lựa chọn danh mục hợp lệ, đã được nhóm lại.
     """
-    # Sử dụng CharField và trỏ source đến property `display_name`
     name = serializers.CharField(source='display_name', read_only=True)
     property_type_code = serializers.CharField(source='property_type.code')
     applicable_features = PropertyFeatureSerializer(many=True, read_only=True)
@@ -44,7 +43,6 @@ class ListingTypeOptionSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = ListingType
-        # Chỉ lấy 2 trường mà frontend cần để hiển thị và xử lý logic
         fields = ['code', 'name']
 
 # ==============================================================================
@@ -56,7 +54,7 @@ class DirectionOptionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Direction
-        fields = ['code', 'name', 'icon_code'] # Giả sử bạn sẽ thêm trường 'code' vào model Direction
+        fields = ['code', 'name', 'icon_code']
 
     def get_icon_code(self, obj: Direction) -> str:
         return direction_maps.get_direction_frontend_info(obj.code).get('icon_code')
@@ -68,7 +66,7 @@ class LegalStatusOptionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LegalStatus
-        fields = ['code', 'name', 'icon_code', 'description', 'color_hex'] # Giả sử bạn sẽ thêm trường 'code' vào model LegalStatus
+        fields = ['code', 'name', 'icon_code', 'description', 'color_hex']
 
     def get_icon_code(self, obj: LegalStatus) -> str:
         return legal_status_maps.get_legal_status_frontend_info(obj.code).get('icon_code')
@@ -94,18 +92,15 @@ class VipTypeOptionSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = VipType
-        # Chỉ trả về các trường mà frontend thực sự cần
         fields = [
             'name',
             'code',
             'price_per_day',
             'sort_priority',
-            # Các trường tùy chỉnh để "chế biến" sẵn cho frontend
-            'subtitle', # Sẽ được thêm bằng SerializerMethodField
-            'benefit_tag', # Sẽ được thêm bằng SerializerMethodField
+            'subtitle',
+            'benefit_tag',
         ]
 
-    # === THÊM CÁC TRƯỜNG "CHẾ BIẾN" DỮ LIỆU ===
     subtitle = serializers.SerializerMethodField()
     benefit_tag = serializers.SerializerMethodField()
 
@@ -130,14 +125,12 @@ class UserPromotionOptionSerializer(serializers.ModelSerializer):
     Serializer để hiển thị các khuyến mãi cụ thể mà người dùng đang có.
     Nó lấy thông tin từ cả UserPromotion và PromotionRule liên quan.
     """
-    # --- Lấy các trường trực tiếp từ PromotionRule ---
     title = serializers.CharField(source='rule.title', read_only=True)
     description = serializers.CharField(source='rule.description', read_only=True)
     promo_type = serializers.CharField(source='rule.promo_type', read_only=True)
     free_listing_days = serializers.IntegerField(source='rule.free_listing_days', read_only=True)
     discount_percentage = serializers.FloatField(source='rule.discount_percentage', read_only=True)
 
-    # Lấy danh sách code của các VipType được áp dụng từ PromotionRule
     applicable_vip_type_codes = serializers.SlugRelatedField(
         source='rule.applicable_vip_types',
         many=True,
@@ -147,14 +140,10 @@ class UserPromotionOptionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserPromotion
-        # Các trường cần hiển thị cho frontend
         fields = [
-            # Từ UserPromotion
-            'code',  # Mã code duy nhất mà người dùng sẽ sử dụng
-            'expiry_date',  # Ngày hết hạn cụ thể của người dùng này
+            'code',
+            'expiry_date',
             'status',
-
-            # Từ PromotionRule (thông qua `source`)
             'title',
             'description',
             'promo_type',

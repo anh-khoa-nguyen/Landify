@@ -96,11 +96,10 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
         return hashids.encode(obj.id)
 
     def get_tag(self, obj: Listing) -> str | None:
-        # TODO: Implement logic to get VIP status tag
         # Ví dụ:
         # vip_status = obj.vip_status.filter(is_active=True).order_by('-vip_type__sort_priority').first()
         # return vip_status.vip_type.name if vip_status else "Tin thường"
-        return "VIP Kim Cương"  # Placeholder
+        return "VIP Kim Cương"
 
     def get_area(self, obj: Listing) -> str:
         if obj.property and obj.property.area:
@@ -130,20 +129,14 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
         Trả về một số float hoặc None.
         """
         try:
-            # 1. Truy vấn bằng `feature__code` thay vì `feature__name`
             value_obj = obj.feature_values.get(feature__code=feature_code)
-
-            # 2. Chuyển đổi giá trị một cách an toàn sang float
             return float(value_obj.value)
 
         except (ListingPropertyFeatureValue.DoesNotExist, ValueError, TypeError):
-            # Bắt tất cả các lỗi có thể xảy ra và trả về None
             return None
 
     def get_beds(self, obj: Listing) -> int | None:
-        # Gọi hàm helper với đúng `code`
         beds_float = self._get_feature_value(obj, 'NUM_BEDROOMS')
-        # Chuyển đổi an toàn sang int nếu không phải là null
         return int(beds_float) if beds_float is not None else None
 
     def get_baths(self, obj: Listing) -> int | None:
@@ -160,34 +153,21 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
     def get_total_image_count(self, obj: Listing) -> int:
         if not hasattr(obj.property, 'media'):
             return 0
-        # TODO: Cần logic phân biệt ảnh/video dựa trên resource_type của Cloudinary
+        # Cần logic phân biệt ảnh/video dựa trên resource_type của Cloudinary
         return obj.property.media.all().count()
 
     def get_total_video_count(self, obj: Listing) -> int:
-        # TODO: Logic phân biệt ảnh/video
+        # Logic phân biệt ảnh/video
         return 0
 
     def get_is_in_wishlist(self, obj: Listing) -> bool:
-        """
-        Kiểm tra xem tin đăng này có trong danh sách yêu thích của người dùng hiện tại không.
-        """
-        # Lấy user từ context của serializer
         request = self.context.get('request')
-
-        # 2. Kiểm tra xem request và user có tồn tại và đã xác thực hay không
         if request and hasattr(request, 'user') and request.user.is_authenticated:
-            # Nếu có, thực hiện kiểm tra như bình thường
             return obj.wishlisted_by.filter(user=request.user).exists()
-
         return False
 
     def get_distance_km(self, obj: Listing) -> float | None:
-        """
-        Lấy khoảng cách đã được tính toán từ annotation trong queryset.
-        """
-        # 'distance' là tên trường chúng ta sẽ tạo bằng .annotate() trong view
         if hasattr(obj, 'distance'):
-            # obj.distance là một đối tượng Distance của GeoDjango, có thuộc tính .km
             return round(obj.distance_km, 2)
         return None
 
@@ -200,23 +180,19 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     property = PropertySerializer(read_only=True)
 
-    # Hiển thị tên thay vì ID
     listing_type_name = serializers.CharField(source="listing_category.listing_type.name", read_only=True, allow_null=True)
     property_type_name = serializers.CharField(source="listing_category.property_type.name", read_only=True, allow_null=True)
 
     unit_price_name = serializers.CharField(source="unit_price.name", read_only=True, allow_null=True)
     unit_price_code = serializers.CharField(source="unit_price.code", read_only=True, allow_null=True)
 
-    # Hiển thị giá đã được định dạng
     display_price = serializers.CharField(read_only=True)
 
-    # Lồng danh sách các feature values
     feature_values = ListingPropertyFeatureValueSerializer(many=True, read_only=True)
     price_analysis = serializers.SerializerMethodField()
 
     class Meta:
         model = Listing
-        # Bao gồm tất cả các trường cần thiết để hiển thị chi tiết một tin đăng
         fields = [
             "public_id",
             "user",
@@ -404,10 +380,6 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
-        """
-        Kiểm tra logic nghiệp vụ phức tạp.
-        """
-        # 1. Đảm bảo người dùng cung cấp `property` hoặc `property_id`, nhưng không phải cả hai.
         has_property_data = "property" in data
         has_property_id = "property_id" in data
 
@@ -422,34 +394,26 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         return data
 
     def validate_features(self, features_data):
-        """
-        Thực hiện validation chi tiết cho từng feature được gửi lên.
-        """
         if not features_data:
             return features_data
 
-        # 1. Tối ưu hóa: Lấy tất cả các feature codes và objects cần thiết trong 1-2 query
         feature_codes = [item.get('feature_code') for item in features_data if item.get('feature_code')]
         features_map = {f.code: f for f in PropertyFeature.objects.filter(code__in=feature_codes)}
 
-        # Helper map để liên kết code của feature với class hằng số tương ứng
         choice_constants_map = {
             "CONDITION_STATUS": constants.ConditionStatus,
             "INTERIOR_STATUS": constants.InteriorStatus,
         }
 
-        # 2. Lặp qua từng feature người dùng gửi lên để kiểm tra
         for item in features_data:
             code = item.get('feature_code')
             value = item.get('value')
 
             feature_obj = features_map.get(code)
 
-            # Kiểm tra xem feature code có tồn tại không
             if not feature_obj:
                 raise serializers.ValidationError(f"Đặc điểm với mã '{code}' không tồn tại.")
 
-            # 3. Kiểm tra giá trị dựa trên feature_type
             feature_type = feature_obj.feature_type
 
             if feature_type == PropertyFeature.FeatureType.FLOAT:
@@ -475,14 +439,10 @@ class ListingCreateSerializer(serializers.ModelSerializer):
                             f"Giá trị '{value}' không hợp lệ cho đặc điểm '{feature_obj.name}'. "
                             f"Các giá trị được chấp nhận là: {', '.join(allowed_values)}."
                         )
-                # Nếu không có trong map, nó là một trường text tự do, không cần validate thêm
 
         return features_data
 
     def validate_promotion_code(self, code):
-        """
-        Validate mã khuyến mãi ở cấp độ Serializer.
-        """
         if not code:
             return code
 
@@ -503,13 +463,11 @@ class ListingAISerializer(ListingDetailSerializer):
     Serializer chuyên dụng để tạo ra một "tài liệu" văn bản hoàn chỉnh
     về một tin đăng, phục vụ cho việc phân tích của AI (ví dụ: chatbot RAG).
     """
-    # Thêm các trường SerializerMethodField để "văn bản hóa" dữ liệu
     full_address_text = serializers.SerializerMethodField()
     features_text = serializers.SerializerMethodField()
     summary_text = serializers.SerializerMethodField()
 
     class Meta(ListingDetailSerializer.Meta):
-        # Kế thừa tất cả các trường từ cha và thêm các trường mới
         fields = ListingDetailSerializer.Meta.fields + [
             'full_address_text',
             'features_text',
@@ -517,7 +475,6 @@ class ListingAISerializer(ListingDetailSerializer):
         ]
 
     def get_full_address_text(self, obj: Listing) -> str:
-        """Tạo ra một chuỗi địa chỉ đầy đủ, dễ đọc."""
         if not obj.property or not obj.property.location:
             return "Không có thông tin địa chỉ."
 
@@ -531,7 +488,6 @@ class ListingAISerializer(ListingDetailSerializer):
         return ", ".join(filter(None, parts))  # Lọc ra các giá trị None và nối chuỗi
 
     def get_features_text(self, obj: Listing) -> str:
-        """Tạo ra một chuỗi tóm tắt các đặc điểm nổi bật."""
         if not obj.feature_values.exists():
             return "Không có thông tin về các đặc điểm chi tiết."
 
@@ -547,7 +503,6 @@ class ListingAISerializer(ListingDetailSerializer):
         Tạo ra một đoạn văn bản tóm tắt toàn diện, là đầu vào chính cho AI.
         Đây là phần quan trọng nhất.
         """
-        # Sử dụng lại các phương thức đã có hoặc truy cập trực tiếp
         property_type = self.get_property_type_name(obj)
         address = self.get_full_address_text(obj)
         area = obj.property.area if obj.property else "Không rõ"
@@ -555,12 +510,10 @@ class ListingAISerializer(ListingDetailSerializer):
         legal_status = obj.property.legal_status.name if obj.property and obj.property.legal_status else "Chưa xác định"
         features = self.get_features_text(obj)
 
-        # Trích xuất nội dung text từ trường RichTextField
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(obj.content, "html.parser")
         content_text = soup.get_text(separator=' ', strip=True)
 
-        # Ghép tất cả lại thành một đoạn văn tự nhiên
         summary = (
             f"Đây là một tin đăng về bất động sản loại '{property_type}' với tiêu đề '{obj.title}'.\n"
             f"Vị trí: {address}.\n"

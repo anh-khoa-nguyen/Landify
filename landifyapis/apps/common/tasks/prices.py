@@ -37,7 +37,6 @@ def update_geogrid_statistics():
     )
 
     # 2. Nhóm các tin đăng vào các ô lưới trong bộ nhớ
-    # Cấu trúc: { cell_id: { category_id: { 'prices': [...], 'type_code': '...', 'prop_code': '...' } } }
     grid_data = defaultdict(lambda: defaultdict(lambda: {
         'prices': [],
         'listing_type_code': None,
@@ -58,7 +57,6 @@ def update_geogrid_statistics():
                 (listing['listing_category__listing_type__code'] == 'BUY_SELL' and unit_price_code == 'PER_M2'):
 
             grid_data[cell_id][category_id]['prices'].append(float(listing['price_value']))
-            # Lưu lại code để ghi vào JSON
             if not grid_data[cell_id][category_id]['listing_type_code']:
                 grid_data[cell_id][category_id]['listing_type_code'] = listing['listing_category__listing_type__code']
                 grid_data[cell_id][category_id]['property_type_code'] = listing['listing_category__property_type__code']

@@ -25,7 +25,6 @@ def send_notification_to_user(user_id: int, category: str, title: str, content: 
         logger.error(f"Lỗi (Task) khi gửi thông báo cho user ID {user_id}: {e}")
 
 
-# === TÁC VỤ TỔNG QUÁT MỚI: Gửi thông báo cho TẤT CẢ admin ===
 @shared_task(name="notifications.send_to_admins")
 def send_notification_to_admins(category: str, title: str, content: str, related_item: dict = None):
     """
@@ -50,6 +49,3 @@ def send_notification_to_admins(category: str, title: str, content: str, related
         logger.info(f"Đã gửi yêu cầu thông báo (category: {category}) đến {admin_users.count()} admin.")
     except Exception as e:
         logger.error(f"Lỗi (Task) khi gửi thông báo hàng loạt cho admin: {e}")
-
-# Các tác vụ cũ (notify_admins_of_new_protest và notify_user_of_protest_resolution)
-# bây giờ đã có thể xóa đi vì chúng ta đã có các phiên bản tổng quát hơn.

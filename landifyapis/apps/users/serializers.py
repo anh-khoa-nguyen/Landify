@@ -40,8 +40,6 @@ class UserSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "date_joined",
             "profile",
         ]
-        # Thêm UserProfile nếu cần
-        # profhile = UserProfileSerializer(read_only=True)
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -57,15 +55,12 @@ class UserUpdateSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         fields = ["first_name", "last_name", "email", "profile"]
 
     def update(self, instance, validated_data):
-        # Tách dữ liệu của profile ra khỏi validated_data
         profile_data = validated_data.pop('profile', None)
 
-        # Cập nhật các trường của User model như bình thường
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Nếu có dữ liệu profile được gửi lên, cập nhật UserProfile
         if profile_data:
             profile, created = UserProfile.objects.get_or_create(
                 user=instance,
@@ -126,7 +121,6 @@ class UserProfileDetailSerializer(DynamicFieldsMixin, serializers.ModelSerialize
     """
     Serializer chuyên dụng để hiển thị trang hồ sơ công khai của một người dùng.
     """
-    # Lồng dữ liệu từ UserProfile model vào đây
     profile = UserProfileSerializer(read_only=True)
 
     # Thêm các trường thống kê về theo dõi
@@ -139,7 +133,7 @@ class UserProfileDetailSerializer(DynamicFieldsMixin, serializers.ModelSerialize
             "id",
             "get_full_name",
             "date_joined",
-            "profile",  # Dữ liệu lồng nhau từ UserProfile
+            "profile",
             "follower_count",
             "following_count",
         ]
@@ -147,7 +141,6 @@ class UserProfileDetailSerializer(DynamicFieldsMixin, serializers.ModelSerialize
 class SubscriptionSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Subscription (Theo dõi)."""
 
-    # Hiển thị thông tin chi tiết của người theo dõi và người được theo dõi
     follower = UserSerializer(read_only=True, fields=("id", "get_full_name", "profile.avatar"))
     following = UserSerializer(read_only=True, fields=("id", "get_full_name", "profile.avatar"))
 

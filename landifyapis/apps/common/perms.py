@@ -1,17 +1,6 @@
 from rest_framework import permissions
 from apps.users.models import User
 
-# =============================================================================
-# LƯU Ý QUAN TRỌNG:
-#
-# Các lớp permission này hoạt động dựa trên đối tượng `request.user` do Django
-# cung cấp sau khi xác thực thành công (ví dụ: qua SimpleJWT).
-#
-# Chúng tương tác trực tiếp với các trường và quan hệ trong Django Models,
-# giúp việc kiểm tra quyền trở nên nhanh chóng và nhất quán.
-# =============================================================================
-
-
 class IsAdmin(permissions.BasePermission):
     """
     Chỉ cho phép truy cập nếu người dùng đã được xác thực và có vai trò là ADMIN.
@@ -45,9 +34,6 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     """
     Kiểm tra quyền trên một đối tượng cụ thể (object-level permission).
     Cho phép truy cập nếu người dùng là admin, hoặc nếu họ là chủ sở hữu của đối tượng.
-
-    Lưu ý: Model của đối tượng cần có một trường trỏ đến User, ví dụ:
-    `user`, `owner`, `reporter`, `protester`.
     """
 
     message = "Bạn không có quyền thực hiện hành động này trên đối tượng này."
@@ -57,9 +43,6 @@ class IsOwnerOrAdmin(permissions.BasePermission):
         if request.user.is_authenticated and request.user.role == User.Role.ADMIN:
             return True
 
-        # Kiểm tra xem đối tượng có thuộc tính 'user', 'owner', v.v. và so sánh
-        # với người dùng đang thực hiện request.
-        # Đây là một cách kiểm tra linh hoạt cho nhiều model khác nhau.
         owner_fields = ["user", "owner", "reporter", "protester", "follower"]
         for field in owner_fields:
             if hasattr(obj, field) and getattr(obj, field) == request.user:

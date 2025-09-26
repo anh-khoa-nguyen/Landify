@@ -42,32 +42,23 @@ def _update_or_create_vip_status(*, listing: listing_models.Listing, vip_package
     """
     vip_type = vip_package_data.get('vip_type')
     duration_days = vip_package_data.get('duration_days')
-    # Mặc định ngày bắt đầu là hôm nay nếu không được cung cấp
     start_date = vip_package_data.get('start_date', timezone.localdate())
 
-    # Chuyển start_date thành datetime có nhận biết timezone
     start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
 
-    # Lấy hoặc tạo mới bản ghi ListingVip cho tin đăng này
     vip_status, created = listing_models.ListingVip.objects.get_or_create(
         listing=listing,
         defaults={'vip_type': vip_type}
     )
 
-    # Xác định ngày bắt đầu để tính toán gia hạn
-    # Nếu gói VIP cũ đã hết hạn, ngày bắt đầu sẽ là ngày người dùng chọn (hoặc hôm nay)
-    # Nếu gói VIP cũ vẫn còn hạ     n, ngày bắt đầu sẽ là ngày hết hạn của gói cũ
     base_date = timezone.now()
     if not created and vip_status.is_active:
         base_date = vip_status.end_date
 
-    # Đảm bảo ngày bắt đầu không sớm hơn thời điểm hiện tại
     effective_start_date = max(base_date, start_datetime)
 
-    # Tính toán ngày kết thúc mới
     new_end_date = effective_start_date + timedelta(days=duration_days)
 
-    # Cập nhật bản ghi vip_status
     vip_status.vip_type = vip_type
     vip_status.end_date = new_end_date
     vip_status.save()
@@ -86,7 +77,6 @@ def create_full_listing(
     Tạo một tin đăng hoàn chỉnh, bao gồm cả việc tạo mới Property nếu cần.
     Hàm này được gọi bởi ListingCreateSerializer.
     """
-    # 1. Tách các dữ liệu lồng nhau và các dữ liệu đặc biệt ra khỏi validated_data
     listing_category_obj = validated_data.pop('listing_category')
     property_data_nested = validated_data.pop("property", None)
     property_id = validated_data.pop("property_id", None)
@@ -94,18 +84,14 @@ def create_full_listing(
     vip_package_data = validated_data.pop("vip_package", None)
     promotion_code = validated_data.pop("promotion_code", None)
 
-    # `validated_data` lúc này chỉ còn chứa các trường của Listing (title, content, price_value, etc.)
-
     with transaction.atomic():
         property_obj = None
 
-        # Kịch bản 1: Liên kết với Bất động sản đã có
         if property_id:
             property_obj = property_id  # DRF đã chuyển nó thành object Property
             if property_obj.owner != user:
                 raise BusinessLogicError("Bạn không có quyền đăng tin cho bất động sản này.")
 
-        # Kịch bản 2: Tạo mới Bất động sản
         elif property_data_nested:
             location_data = property_data_nested.pop("location")
             latitude = location_data.pop('latitude', None)
@@ -116,21 +102,17 @@ def create_full_listing(
 
             location_obj = property_models.Location.objects.create(**location_data)
 
-            # === SỬA LỖI QUAN TRỌNG NHẤT TẠI ĐÂY ===
-            # `property_data_nested` bây giờ chỉ chứa các trường của Property
-            # như `area`, `direction`, `legal_status`.
             property_obj = property_models.Property.objects.create(
                 owner=user,
                 location=location_obj,
                 property_type=listing_category_obj.property_type,
-                **property_data_nested  # Truyền dictionary đã được làm sạch
+                **property_data_nested
             )
             # =======================================
 
         if not property_obj:
             raise BusinessLogicError("Cần phải cung cấp 'property' (để tạo mới) hoặc 'property_id' (để liên kết).")
 
-        # 3. Tạo đối tượng Listing chính
         listing = listing_models.Listing.objects.create(
             user=user,
             property=property_obj,
@@ -139,7 +121,6 @@ def create_full_listing(
         )
 
         if vip_package_data:
-            # Gọi một hàm helper mới để xử lý logic VIP
             _update_or_create_vip_status(
                 listing=listing,
                 vip_package_data=vip_package_data
@@ -161,7 +142,6 @@ def create_full_listing(
 
         if features_data:
             feature_values_to_create = []
-            # Lấy tất cả các feature cần thiết trong 1 query để tối ưu
             feature_codes = [item['feature_code'] for item in features_data]
             features_map = {f.code: f for f in PropertyFeature.objects.filter(code__in=feature_codes)}
 
@@ -205,7 +185,6 @@ def update_listing_features(*, listing: models.Listing, features_data: List[Dict
         feature.id: feature for feature in models.PropertyFeature.objects.filter(id__in=incoming_feature_ids)
     }
 
-    # Bắt đầu một giao dịch để đảm bảo tất cả các thay đổi thành công hoặc không gì cả
     with transaction.atomic():
         current_feature_ids = set(listing.feature_values.values_list("feature_id", flat=True))
         features_to_delete = current_feature_ids - incoming_feature_ids
@@ -214,19 +193,16 @@ def update_listing_features(*, listing: models.Listing, features_data: List[Dict
                 listing=listing, feature_id__in=features_to_delete
             ).delete()
 
-        # 2. Thêm hoặc cập nhật các feature từ dữ liệu đầu vào
         for item in features_data:
             feature_id = item.get("feature_id")
             value = item.get("value")
 
-            # Bỏ qua nếu thiếu dữ liệu hoặc feature_id không hợp lệ
             if not feature_id or feature_id not in features_map:
                 continue
 
             feature = features_map[feature_id]
             validated_value = None
 
-            # 3. Xác thực và chuẩn hóa giá trị dựa trên loại feature
             if feature.feature_type == models.PropertyFeature.FeatureType.FLOAT:
                 try:
                     validated_value = float(value)
@@ -260,7 +236,6 @@ def update_listing_features(*, listing: models.Listing, features_data: List[Dict
             else:
                 validated_value = str(value).strip()
 
-            # 4. Lưu vào CSDL
             if validated_value is not None:
                 models.ListingPropertyFeatureValue.objects.update_or_create(
                     listing=listing, feature=feature, defaults={"value": validated_value}
@@ -275,32 +250,28 @@ def find_potential_listings(
     *,
     latitude: float,
     longitude: float,
-    filters: dict = None, # Tham số filters là tùy chọn
+    filters: dict = None,
     radius_km: int = 20
 ):
     """
     Tìm, LỌC (nếu có), và CHẤM ĐIỂM các tin đăng tiềm năng.
     Hàm này kết hợp cả logic lọc cứng và xếp hạng mềm.
     """
-    # Nếu không có filter nào được truyền vào, khởi tạo một dict rỗng
     if filters is None:
         filters = {}
 
-    # --- CÁC TRỌNG SỐ CHO VIỆC TÍNH ĐIỂM ---
     WEIGHT_DISTANCE = -10
     WEIGHT_VIP = 1.5
     WEIGHT_FEATURES = 5
     POINTS_MANY_IMAGES = 30
     POINTS_HAS_VIDEO = 40
     POINTS_HAS_LEGAL = 10
-    WEIGHT_SCAM_SCORE = -200 # Điểm trừ rất nặng cho tin có khả năng lừa đảo
+    WEIGHT_SCAM_SCORE = -200
 
     # 1. Bắt đầu với queryset cơ sở
     base_queryset = Listing.objects.filter(
         active=True,
         status=Listing.Status.AVAILABLE,
-        # Chỉ gợi ý các tin đã được AI xác định là "trong sạch"
-        # Hoặc bạn có thể lọc theo scam_score < ngưỡng nào đó
         spam_check_status=Listing.SpamCheckStatus.CLEAN
     )
 

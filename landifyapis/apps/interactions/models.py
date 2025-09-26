@@ -180,7 +180,6 @@ class Chat(BaseModel):
         return f"Chat ID: {self.id}"
 
 class Message(BaseModel):
-    # === CÁC LOẠI TIN NHẮN CÓ THỂ CÓ ===
     class MessageType(models.TextChoices):
         TEXT = 'TEXT', 'Tin nhắn văn bản'
         IMAGE = 'IMAGE', 'Hình ảnh'
@@ -188,8 +187,6 @@ class Message(BaseModel):
         SYSTEM = 'SYSTEM', 'Thông báo hệ thống'  # Ví dụ: "A đã tham gia cuộc trò chuyện"
         LISTING_LINK = 'LISTING_LINK', 'Liên kết tin đăng'
         INTERACTIVE_CARD = 'INTERACTIVE_CARD', 'Thẻ tương tác'
-
-    # === CÁC TRƯỜNG CỐT LÕI ===
 
     chat = models.ForeignKey(
         Chat,
@@ -200,14 +197,13 @@ class Message(BaseModel):
 
     sender = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,  # Khi người dùng bị xóa, tin nhắn của họ cũng bị xóa
+        on_delete=models.CASCADE,
         related_name='sent_messages',
         verbose_name="Người gửi"
     )
 
-    # Nội dung chính của tin nhắn (văn bản, hoặc mô tả cho file/ảnh)
     content = models.TextField(
-        blank=True,  # Cho phép tin nhắn chỉ có file mà không có text
+        blank=True,
         verbose_name="Nội dung"
     )
 
@@ -235,7 +231,7 @@ class Message(BaseModel):
     content_type = models.ForeignKey(
         ContentType,
         on_delete=models.CASCADE,
-        null=True, # Cho phép null vì tin nhắn TEXT không có đối tượng liên kết
+        null=True,
         blank=True
     )
 
@@ -243,7 +239,7 @@ class Message(BaseModel):
         null=True,
         blank=True
     )
-    # 3. Trường ảo để truy cập đối tượng một cách tiện lợi
+
     linked_object = GenericForeignKey('content_type', 'object_id')
 
     class Meta:

@@ -37,7 +37,6 @@ def add_multiple_media_to_property(
         raise BusinessLogicError("Không có file hợp lệ nào để xử lý.")
 
     try:
-        # bulk_create sẽ gọi .save() cho từng instance, kích hoạt việc upload lên Cloudinary
         created_instances = models.PropertyMedia.objects.bulk_create(instances_to_create)
         return created_instances
     except Exception as e:

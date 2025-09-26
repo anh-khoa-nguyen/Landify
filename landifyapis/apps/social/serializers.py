@@ -11,11 +11,9 @@ class PostSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
 
     user = UserSerializer(read_only=True, fields=("id", "get_full_name", "profile.avatar"))
 
-    # Các trường được tính toán (annotated) từ queryset trong view
     comment_count = serializers.IntegerField(read_only=True)
     reaction_count = serializers.IntegerField(read_only=True)
 
-    # Trường tùy chỉnh để hiển thị cảm xúc của người dùng hiện tại trên bài đăng
     current_user_reaction = serializers.SerializerMethodField()
 
     class Meta:
@@ -36,7 +34,6 @@ class PostSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     def get_current_user_reaction(self, obj) -> str | None:
         """
         Lấy loại cảm xúc của người dùng đang đăng nhập trên bài đăng này.
-        Phương thức này yêu cầu 'request' phải được truyền vào context của serializer.
         """
         request = self.context.get("request")
         if request and hasattr(request, "user") and request.user.is_authenticated:

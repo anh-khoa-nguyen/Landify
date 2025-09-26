@@ -75,9 +75,6 @@ class GeoGridStatistic(models.Model):
         verbose_name="Thống kê theo từng Danh mục"
     )
 
-    # Chúng ta vẫn có thể giữ lại các trường tổng hợp nếu muốn hiển thị nhanh
-    # hoặc có thể loại bỏ chúng để đơn giản hóa. Ở đây, tôi sẽ loại bỏ chúng.
-
     last_updated = models.DateTimeField(auto_now=True, verbose_name="Lần cuối cập nhật")
 
     def __str__(self):

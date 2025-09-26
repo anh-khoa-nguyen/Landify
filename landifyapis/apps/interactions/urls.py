@@ -23,5 +23,5 @@ urlpatterns = [
          views.SendAppointmentRequestView.as_view(),
          name='chat-send-appointment'),
     path('', include(router.urls)),
-    path('', include(chats_router.urls)),  # <-- THÊM DÒNG NÀY
+    path('', include(chats_router.urls)),
 ]

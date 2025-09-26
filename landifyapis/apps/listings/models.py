@@ -17,8 +17,6 @@ from apps.users.models import User
 # cho việc tạo và phân loại tin đăng.
 
 class UnitPrice(models.Model):
-    """Model để định nghĩa các loại đơn vị giá."""
-
     name = models.CharField(max_length=50, unique=True, verbose_name="Tên đơn vị")  # Ví dụ: "triệu/m²", "tỷ"
     code = models.CharField(max_length=50, unique=True, verbose_name="Mã đơn vị")  # Ví dụ: "VND_PER_M2", "VND_BILLION"
     is_per_area_unit = models.BooleanField(default=False, verbose_name="Là đơn vị theo diện tích")
@@ -64,10 +62,8 @@ class ListingCategory(BaseModel):
         verbose_name="Các đặc điểm áp dụng"
     )
 
-    # Thêm một property để tự động tạo ra tên hiển thị khi cần
     @property
     def display_name(self):
-        # Ví dụ: "Mua Bán" + " " + "Căn hộ chung cư" -> "Mua Bán Căn hộ chung cư"
         return f"{self.listing_type.name} {self.property_type.name}"
 
     def __str__(self):
@@ -89,8 +85,6 @@ class VipType(BaseModel):
     """
     Model để định nghĩa các loại gói VIP cho tin đăng.
     Chứa các quy tắc nghiệp vụ và dữ liệu có thể tính toán.
-
-    Lưu ý: is_active đã được kế thừa từ BaseModel.
     """
 
     name = models.CharField(max_length=100, unique=True, verbose_name="Tên gói VIP")
@@ -121,24 +115,20 @@ class PromotionRule(BaseModel):
         ON_SIGNUP = "ON_SIGNUP", "Khi đăng ký tài khoản"
         MANUAL = "MANUAL", "Gán thủ công bởi admin"
 
-    # --- Thông tin cơ bản ---
     title = models.CharField(max_length=255, verbose_name="Tên chương trình KM")
     description = models.TextField(verbose_name="Mô tả chi tiết")
     promo_type = models.CharField(max_length=20, choices=PromotionType.choices, verbose_name="Loại khuyến mãi")
 
-    # --- Thông tin về giá trị KM ---
     free_listing_days = models.PositiveIntegerField(null=True, blank=True, verbose_name="Số ngày đăng tin miễn phí")
     discount_percentage = models.FloatField(null=True, blank=True, verbose_name="Phần trăm giảm giá VIP")
     applicable_vip_types = models.ManyToManyField(VipType, blank=True, verbose_name="Áp dụng cho các gói VIP")
 
-    # === LOGIC MỚI CHO THỜI HẠN ĐỘNG ===
     trigger_event = models.CharField(
         max_length=20,
         choices=TriggerEvent.choices,
         default=TriggerEvent.MANUAL,
         verbose_name="Sự kiện kích hoạt"
     )
-    # Số ngày hiệu lực KỂ TỪ KHI được kích hoạt
     validity_duration = models.PositiveIntegerField(
         null=True, blank=True,
         verbose_name="Thời hạn hiệu lực (số ngày)",
@@ -348,17 +338,12 @@ class UserPromotion(BaseModel):
         EXPIRED = "EXPIRED", "Đã hết hạn"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="user_promotions")
-    # Liên kết đến quy tắc gốc để lấy thông tin (title, description, giá trị KM)
     rule = models.ForeignKey(PromotionRule, on_delete=models.CASCADE, related_name="instances")
-    # Mã code duy nhất cho lần sử dụng này, có thể giống với code của rule hoặc là duy nhất
     code = models.CharField(max_length=50, unique=True, verbose_name="Mã khuyến mãi")
-
-    # Ngày hết hạn CỤ THỂ được tính toán cho user này
     expiry_date = models.DateTimeField(verbose_name="Ngày hết hạn")
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AVAILABLE)
 
-    # Lưu lại thời điểm và đối tượng đã sử dụng mã này
     used_at = models.DateTimeField(null=True, blank=True)
     used_on_listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True)
 

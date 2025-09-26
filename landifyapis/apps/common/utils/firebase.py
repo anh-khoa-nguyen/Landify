@@ -4,7 +4,7 @@ from typing import Any, Dict
 import firebase_admin
 from django.conf import settings
 from firebase_admin import auth, credentials, firestore
-from apps.users.models import User # <-- THÊM IMPORT NÀY
+from apps.users.models import User
 
 import logging
 logger = logging.getLogger(__name__)

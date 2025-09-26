@@ -133,16 +133,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         Hàm này thay thế cho DRF Serializer, tạo ra một dictionary
         an toàn để gửi qua JSON.
         """
-        # Đây là cách an toàn nhất để tránh lỗi context của DRF trong consumer.
-        # Chúng ta sẽ build lại context một cách thủ công nếu cần.
-        # Tuy nhiên, để đơn giản, chúng ta sẽ không dùng DRF serializer ở đây.
 
         linked_object_data = None
         if message.content_type and message.object_id:
             linked_obj = message.linked_object
 
-            # Dùng một context giả chỉ chứa user, vì một số serializer con có thể cần
-            # (mặc dù cách tốt nhất là sửa các serializer con đó để không cần request)
             fake_context = {'user': self.user}
 
             if isinstance(linked_obj, Appointment):

@@ -51,14 +51,12 @@ class UserViewSet(viewsets.ModelViewSet):
     )
 
     def get_serializer_class(self):
-        if self.action == 'current_user':
+        if self.action == ['current_user', 'retrieve']:
             return UserProfileDetailSerializer
         if self.action == "create":
             return UserCreateSerializer
         if self.action in ["update", "partial_update", "complete_profile"]:
             return UserUpdateSerializer
-        if self.action == 'retrieve':
-            return UserProfileDetailSerializer
         return UserSerializer
 
     def get_permissions(self):
@@ -66,8 +64,8 @@ class UserViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]
         if self.action in ["retrieve", "list"]:
             return [permissions.AllowAny()]
-        if self.action == "disable_account":
-            return [perms.IsAdmin()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [perms.IsOwnerOrAdmin()]
         return [permissions.IsAuthenticated()]
 
     @accounts_docs.current_user_schema
@@ -115,8 +113,6 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        # Trả về thông tin User đã được cập nhật (bao gồm cả profile)
-        # để client có thể cập nhật UI ngay lập tức.
         return Response(UserSerializer(user, context={'request': request}).data, status=status.HTTP_200_OK)
 
     @accounts_docs.toggle_follow_schema
@@ -138,16 +134,14 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         Trả về danh sách các tin đăng trong wishlist của người dùng hiện tại.
         """
+
         user = request.user
         listing_ids = Wishlist.objects.filter(user=user).values_list('listing_id', flat=True)
 
-        # Truy vấn các tin đăng đó
         queryset = Listing.objects.filter(id__in=listing_ids)
 
-        # Dùng Paginator của ViewSet để phân trang
         page = self.paginate_queryset(queryset)
         if page is not None:
-            # Dùng ListingPreviewSerializer để trả về dữ liệu gọn nhẹ
             serializer = ListingPreviewSerializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
 
@@ -162,19 +156,14 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         user = request.user
 
-        # 1. Truy vấn tất cả tin đăng của người dùng này, sắp xếp theo ngày tạo mới nhất
-        #    Quan trọng: Chúng ta không lọc theo active=True hay status='AVAILABLE'
-        #    vì người dùng cần xem tất cả tin đăng của họ để quản lý.
         queryset = Listing.objects.filter(user=user).order_by('-created_date')
 
-        # 2. Phân trang kết quả
         page = self.paginate_queryset(queryset)
         if page is not None:
             # Dùng ListingPreviewSerializer để trả về dữ liệu gọn nhẹ, phù hợp cho danh sách
             serializer = ListingPreviewSerializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
 
-        # 3. Serialize và trả về nếu không phân trang
         serializer = ListingPreviewSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
@@ -214,6 +203,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         # 5. Phân trang và trả về kết quả
         page = self.paginate_queryset(queryset)
+
         if page is not None:
             serializer = ReportSerializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
@@ -224,11 +214,9 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(methods=["get"], detail=False, url_path="me/cooperations-received")
     def cooperations_received(self, request):
         """
-        Trả về danh sách các yêu cầu hợp tác mà người dùng hiện tại đã NHẬN ĐƯỢỢC
-        (với vai trò là chủ tin đăng).
+        Trả về danh sách các yêu cầu hợp tác mà người dùng hiện tại đã NHẬN ĐƯỢC
         """
         user = request.user
-        # Lọc các Cooperation mà người dùng hiện tại là 'owner'
         queryset = Cooperation.objects.filter(owner=user).order_by('-created_date')
 
         page = self.paginate_queryset(queryset)
@@ -243,13 +231,12 @@ class UserViewSet(viewsets.ModelViewSet):
     def cooperations_sent(self, request):
         """
         Trả về danh sách các yêu cầu hợp tác mà người dùng hiện tại đã GỬI ĐI
-        (với vai trò là môi giới).
         """
         user = request.user
-        # Lọc các Cooperation mà người dùng hiện tại là 'agent'
         queryset = Cooperation.objects.filter(agent=user).order_by('-created_date')
 
         page = self.paginate_queryset(queryset)
+
         if page is not None:
             serializer = self.get_serializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
@@ -264,14 +251,13 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         user = request.user
 
-        # Lọc các Review mà người dùng hiện tại là 'user'
-        # Dùng select_related để tối ưu, lấy sẵn thông tin của Bất động sản liên quan
         queryset = Review.objects.filter(user=user).select_related(
             'property__property_type',
             'property__location'
         ).order_by('-created_date')
 
         page = self.paginate_queryset(queryset)
+
         if page is not None:
             serializer = self.get_serializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)

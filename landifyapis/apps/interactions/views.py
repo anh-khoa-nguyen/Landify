@@ -86,19 +86,13 @@ class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
 
     def get_permissions(self):
-        # Ai cũng có thể xem đánh giá
         if self.action in ['list', 'retrieve']:
             return [permissions.AllowAny()]
-        # Chỉ người dùng đã xác thực danh tính mới được tạo đánh giá
         if self.action == 'create':
             return [perms.IsIdentityVerified()]
-        # Chỉ chủ sở hữu đánh giá hoặc admin mới được sửa/xóa
         return [perms.IsOwnerOrAdmin()]
 
     def get_serializer_context(self):
-        """
-        Ghi đè để thêm 'property' vào context cho serializer.
-        """
         context = super().get_serializer_context()
         if self.kwargs.get('public_id_public_id'):
             public_id = self.kwargs.get('public_id_public_id')
@@ -107,9 +101,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
         return context
 
     def get_queryset(self):
-        """
-        Nếu URL có property_pk, chỉ hiển thị review của BĐS đó.
-        """
         queryset = Review.objects.select_related('user__profile').all()
 
         public_id = self.kwargs.get('public_id_public_id')
@@ -149,19 +140,12 @@ class CooperationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """
-        Lọc queryset để người dùng chỉ thấy các hợp tác liên quan đến họ.
-        """
         user = self.request.user
-        # Người dùng có thể thấy các yêu cầu họ gửi ĐI hoặc nhận ĐẾN
         return Cooperation.objects.filter(
             Q(agent=user) | Q(owner=user)
         ).select_related('listing', 'agent__profile', 'owner__profile')
 
     def perform_create(self, serializer):
-        """
-        Ghi đè để tự động điền agent và owner khi tạo yêu cầu.
-        """
         listing_id = serializer.validated_data.get('listing_id')
         try:
             listing = Listing.objects.select_related('user').get(id=listing_id)
@@ -179,17 +163,11 @@ class CooperationViewSet(viewsets.ModelViewSet):
 
     @action(methods=['post'], detail=True, url_path='respond')
     def respond(self, request, pk=None):
-        """
-        Action để chủ tin đăng phản hồi một yêu cầu (accept/reject) bằng cách gọi service.
-        """
-        # 1. Lấy đối tượng Cooperation từ URL
         cooperation = self.get_object()
 
-        # 2. Lấy dữ liệu từ request body
         action_type = request.data.get('action')
         reason = request.data.get('reason')
 
-        # 3. Gọi service để thực hiện toàn bộ logic nghiệp vụ
         try:
             updated_cooperation = interactions_services.respond_to_cooperation_request(
                 cooperation=cooperation,
@@ -198,10 +176,8 @@ class CooperationViewSet(viewsets.ModelViewSet):
                 reason=reason
             )
         except CooperationActionError as e:
-            # Bắt lỗi nghiệp vụ cụ thể và trả về lỗi 400
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 4. Serialize kết quả và trả về response thành công
         serializer = self.get_serializer(updated_cooperation)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -211,9 +187,6 @@ class CooperationViewSet(viewsets.ModelViewSet):
 # Các View và ViewSet này tạo nên toàn bộ API cho hệ thống trò chuyện.
 
 class StartChatView(APIView):
-    """
-    API để bắt đầu hoặc lấy thông tin một cuộc trò chuyện.
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, format=None):
@@ -251,10 +224,6 @@ class ChatViewSet(viewsets.ReadOnlyModelViewSet):
     lookup_field = 'pk' # Hoặc 'id'
 
     def get_queryset(self):
-        """
-        Ghi đè để đảm bảo người dùng chỉ có thể truy cập
-        vào các cuộc trò chuyện mà họ là thành viên.
-        """
         user = self.request.user
         return user.chats.all().prefetch_related('participants', 'listing').order_by('-last_message_timestamp')
 
@@ -269,7 +238,6 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         chat_id = self.kwargs.get('chat_pk')
 
-        # Định nghĩa các queryset cho prefetch
         appointment_queryset = Appointment.objects.all().select_related('listing')
         cooperation_queryset = Cooperation.objects.all().select_related('listing', 'agent')
 
@@ -277,7 +245,6 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
             chat_id=chat_id,
             chat__participants=self.request.user
         ).prefetch_related(
-            # Cung cấp querysets cho GenericPrefetch
             GenericPrefetch(
                 'linked_object',
                 querysets=[
@@ -287,19 +254,15 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
             )
         )
 
-# --- Interactive Action Views ---
-# Ghi chú: View này xử lý một hành động cụ thể bên trong một cuộc trò chuyện.
 class SendAppointmentRequestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, chat_pk=None):
         appointment_id = request.data.get('appointment_id')
 
-        # 1. Lấy các object cần thiết và kiểm tra quyền
         chat = get_object_or_404(Chat, pk=chat_pk, participants=request.user)
         appointment = get_object_or_404(Appointment, pk=appointment_id)
 
-        # 2. Tạo tin nhắn trong DB
         message = Message.objects.create(
             chat=chat,
             sender=request.user,
@@ -310,7 +273,6 @@ class SendAppointmentRequestView(APIView):
         chat.last_message_timestamp = message.created_date
         chat.save()
 
-        # 3. Gửi tin nhắn qua WebSocket bằng Channels Layer
         channel_layer = get_channel_layer()
 
         serializer_context = {'request': request}

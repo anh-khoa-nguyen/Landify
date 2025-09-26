@@ -17,7 +17,6 @@ from rest_framework.views import APIView
 from apps.listings.models import Listing, VipType, ListingVip
 from apps.common.utils.hashids import decode_public_id
 
-# --- CẤU HÌNH MOMO (Đọc từ settings.py, đã được load từ .env) ---
 MOMO_PARTNER_CODE = getattr(settings, "MOMO_PARTNER_CODE", "")
 MOMO_ACCESS_KEY = getattr(settings, "MOMO_ACCESS_KEY", "")
 MOMO_SECRET_KEY = getattr(settings, "MOMO_SECRET_KEY", "")
@@ -147,9 +146,6 @@ class ConfirmMomoPaymentView(APIView):
 
         if not self.verify_signature(response_data):
             print("IPN SIGNATURE FAILED!")
-            # Trong production, nên trả về lỗi để MoMo biết và thử lại.
-            # Tuy nhiên, trong môi trường test, ta có thể bỏ qua để dễ gỡ lỗi.
-            # return Response({"error": "Invalid signature"}, status=status.HTTP_400_BAD_REQUEST)
             pass  # Tạm thời bỏ qua để test
 
         try:

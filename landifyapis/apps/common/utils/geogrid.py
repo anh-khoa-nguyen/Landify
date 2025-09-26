@@ -2,7 +2,7 @@
 import math
 
 # Kích thước của mỗi ô lưới (tính bằng độ vĩ tuyến/kinh tuyến)
-# 0.01 độ ~ 1.11km. Bạn có thể điều chỉnh giá trị này để ô lưới to/nhỏ hơn.
+# 0.01 độ ~ 1.11km.
 GRID_SIZE_DEGREES = 0.01
 
 

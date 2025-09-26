@@ -47,20 +47,15 @@ class ModerationAction(BaseModel):
         WARN_USER = "WARN", "Cảnh cáo người dùng"
         BAN_USER = "BAN", "Khóa tài khoản người dùng"
 
-    # Hành động này được kích hoạt bởi báo cáo nào (có thể là null nếu admin tự kiểm tra)
     report = models.ForeignKey(
         Report, on_delete=models.SET_NULL, null=True, blank=True, related_name="actions"
     )
-    # Admin nào đã thực hiện hành động
     moderator = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, related_name="moderation_actions"
     )
-    # Loại hành động đã thực hiện
     action_type = models.CharField(max_length=20, choices=ActionType.choices)
-    # Lý do/ghi chú của admin
     reason = models.TextField(help_text="Ghi chú của admin về lý do thực hiện hành động này.")
 
-    # Đối tượng bị tác động (tin đăng, user, bài viết...)
     target_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     target_object_id = models.PositiveIntegerField()
     target_object = GenericForeignKey('target_content_type', 'target_object_id')
@@ -80,13 +75,10 @@ class Protest(BaseModel):
     action = models.OneToOneField(
         ModerationAction, on_delete=models.CASCADE, related_name='protest', verbose_name="Hành động bị kháng nghị"
     )
-    # Người dùng gửi kháng nghị (thường là chủ của đối tượng bị xử lý)
     protester = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="protests", verbose_name="Người kháng nghị"
     )
     reason = models.TextField(verbose_name="Lý do kháng nghị")
-
-    # Thông tin xử lý kháng nghị
     admin_reviewer = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_protests",
         verbose_name="Admin xem xét kháng nghị"

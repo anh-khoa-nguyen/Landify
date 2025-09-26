@@ -33,7 +33,6 @@ class PropertyFeatureSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "code", "category", "feature_type", "icon_code", "unit", "choices"]
 
     def get_frontend_info(self, obj: PropertyFeature) -> dict:
-        """Hàm helper để tra cứu thông tin frontend và cache kết quả."""
         cache_key = f"frontend_info_{obj.code}"
 
         if cache_key in self.context:

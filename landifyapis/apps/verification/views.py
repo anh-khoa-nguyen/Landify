@@ -39,6 +39,7 @@ class VerificationViewSet(viewsets.ViewSet):
     @verification_docs.verify_otp_schema
     @action(methods=["post"], detail=False, url_path="verify-otp")
     def verify_phone_otp(self, request):
+        """Xác thực mã OTP để đăng nhập."""
         otp_code = request.data.get("otp")
         if not otp_code:
             return Response({"error": "Vui lòng cung cấp mã OTP."}, status=status.HTTP_400_BAD_REQUEST)
@@ -84,13 +85,10 @@ class VerificationViewSet(viewsets.ViewSet):
         except EkycError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            # Ghi log lỗi ở đây
             return Response({"error": "Đã có lỗi hệ thống xảy ra."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 def get_property_or_404(pk):
-    """Hàm tiện ích để lấy đối tượng Property hoặc ném ra lỗi 404."""
     return get_object_or_404(Property, pk=pk)
-
 
 # =================== ANALYSIS & UTILITIES ==========================
 
@@ -98,7 +96,7 @@ def get_property_or_404(pk):
 class PropertyAnalysisViewSet(viewsets.ViewSet):
     """ViewSet cho các API phân tích, không theo mô hình CRUD."""
 
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
 
     @action(detail=True, methods=["post"], url_path="feng-shui")
     def feng_shui_analysis(self, request, pk=None):
@@ -113,7 +111,6 @@ class PropertyAnalysisViewSet(viewsets.ViewSet):
             date_of_birth = datetime.strptime(dob_str, "%Y-%m-%d").date()
             direction_name = prop.direction.name if prop.direction else None
 
-            # --- GỌI HÀM SERVICE ---
             result = verification_services.get_feng_shui_analysis(
                 property_direction_name=direction_name, date_of_birth=date_of_birth
             )
@@ -134,8 +131,6 @@ class AgoraTokenViewSet(viewsets.ViewSet):
     @action(methods=["post"], detail=False, url_path="generate")
     def generate_token(self, request):
         channel_name = request.data.get("channelName")
-        # Lấy user ID của người dùng đang đăng nhập làm UID cho Agora
-        # Đây chính là ID từ CSDL Postgres
         uid = request.user.id
 
         try:
@@ -143,7 +138,7 @@ class AgoraTokenViewSet(viewsets.ViewSet):
                 channel_name=channel_name,
                 uid=uid
             )
-            # token_data trả về từ service đã có dạng {"token": "...", "uid": ...}
+            # Token_data trả về từ service đã có dạng {"token": "...", "uid": ...}
             return Response(token_data, status=status.HTTP_200_OK)
         except BusinessLogicError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
