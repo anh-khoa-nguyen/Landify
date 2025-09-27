@@ -1,0 +1,22 @@
+[
+  {
+    "label": "Mua bán",
+    "imagePath": "assets/images/property_types/buy_sell.png",
+    "code": "BUY_SELL"
+  },
+  {
+    "label": "Cho Thuê",
+    "imagePath": "assets/images/property_types/rent.png",
+    "code": "RENT"
+  },
+  {
+    "label": "Dự án",
+    "imagePath": "assets/images/property_types/project.png",
+    "code": "PROJECT"
+  },
+  {
+    "label": "Môi giới",
+    "imagePath": "assets/images/property_types/agent.png",
+    "code": null
+  }
+]

@@ -1,0 +1,8 @@
+#daphne -p 8000 landifyapis.asgi:application
+
+celery -A landifyapis worker -l info -P solo
+celery -A landifyapis beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+python manage.py shell
+from apps.common.tasks.prices import update_geogrid_statistics
+update_geogrid_statistics.delay()

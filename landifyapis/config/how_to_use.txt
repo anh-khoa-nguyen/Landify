@@ -1,0 +1,1 @@
+python config/sync_remote_config.py

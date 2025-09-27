@@ -1,0 +1,27 @@
+[
+  {
+    "label": "Biểu đồ giá",
+    "icon": "chartBar",
+    "routeName": "/price-chart"
+  },
+  {
+    "label": "Vay mua nhà",
+    "icon": "wallet",
+    "routeName": "/loan-calculator"
+  },
+  {
+    "label": "Kinh nghiệm",
+    "icon": "book",
+    "routeName": "/articles"
+  },
+  {
+    "label": "Gói Pro",
+    "icon": "award",
+    "routeName": "/pro-package"
+  },
+  {
+    "label": "Tài khoản DN",
+    "icon": "briefcase",
+    "routeName": "/business-account"
+  }
+]
