@@ -14,8 +14,8 @@
 
 This repository contains the core backend infrastructure, built with **Django** and **Django REST Framework**. It provides a powerful, scalable, and feature-rich RESTful API that serves as the backbone for the entire platform, including the Flutter mobile client and specialized microservices.
 
--   **Frontend (Flutter) Repository:** [Link to your Flutter repo]
--   **Microservices (FastAPI) Repository:** [Link to your FastAPI repo]
+-   **Frontend (Flutter) Repository:** [Flutter repo](https://github.com/anh-khoa-nguyen/LandifyFront)
+-   **Microservices (FastAPI) Repository:** [FastAPI repo]
 
 ## 🏗️ System Architecture
 
