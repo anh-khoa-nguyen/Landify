@@ -1,18 +1,17 @@
 from django.shortcuts import get_object_or_404
-
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import parsers, permissions, serializers, status, viewsets
 from rest_framework.response import Response
 
-from apps.common.docs import listings_docs, media_docs
 from apps.common import perms
+from apps.common.docs import listings_docs, media_docs
 from apps.common.services import BusinessLogicError
 
-from .models import PropertyMedia, Property
-from .serializers import PropertySerializer, PropertyMediaSerializer
 from . import services as property_services
+from .models import Property, PropertyMedia
+from .serializers import PropertyMediaSerializer, PropertySerializer
 
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
 
 # ==============================================================================
 # PRIMARY PROPERTY VIEWSET
@@ -24,7 +23,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
     queryset = (
         Property.objects.select_related("owner", "location", "property_type")
-        .prefetch_related("utilities")
+        .prefetch_related("media")
         .filter(active=True)
     )
 
@@ -39,6 +38,7 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
 
 # ==============================================================================
 # NESTED MEDIA VIEWSET
@@ -59,7 +59,7 @@ class MediaViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ["list", "retrieve"]:
             return [permissions.AllowAny()]
-        return [perms.IsOwnerOrAdmin()]
+        return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
         return self.queryset.filter(property_id=self.kwargs.get("property_pk"))
@@ -71,13 +71,13 @@ class MediaViewSet(viewsets.ModelViewSet):
         """
         prop = get_object_or_404(Property, pk=self.kwargs.get("property_pk"))
 
-        if prop.owner != request.user:
+        if prop.owner != request.user and not request.user.is_staff:
             return Response(
                 {"detail": "Bạn không có quyền thêm media cho bất động sản này."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        media_files = request.FILES.getlist('files')
+        media_files = request.FILES.getlist("files")
 
         if not media_files:
             return Response(
@@ -94,5 +94,19 @@ class MediaViewSet(viewsets.ModelViewSet):
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         response_serializer = self.get_serializer(created_media_instances, many=True)
-
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Ghi đè logic xóa để kiểm tra quyền sở hữu của Bất động sản cha.
+        """
+        media_object = self.get_object()
+        parent_property = media_object.property
+
+        if parent_property.owner != request.user and not request.user.is_staff:
+            return Response(
+                {"detail": "Bạn không có quyền xóa media của bất động sản này."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        return super().destroy(request, *args, **kwargs)

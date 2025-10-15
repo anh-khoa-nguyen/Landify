@@ -1,19 +1,20 @@
 # landifys/tests/test_accounts/test_toggle_user_follow.py
 
 import pytest
-from landifys.services import accounts, BusinessLogicError
-from landifys.models import User, Subscription
+from landifys.models import Subscription, User
+from landifys.services import BusinessLogicError, accounts
+
 
 @pytest.mark.django_db
-@pytest.mark.step_log # <<< ĐÁNH DẤU TEST NÀY
-def test_user_cannot_follow_themselves(log_step): # <<< INJECT FIXTURE VÀO ĐÂY
+@pytest.mark.step_log  # <<< ĐÁNH DẤU TEST NÀY
+def test_user_cannot_follow_themselves(log_step):  # <<< INJECT FIXTURE VÀO ĐÂY
     """
     KỊCH BẢN 1: Thất bại
     Kiểm tra rằng hệ thống sẽ ném ra lỗi BusinessLogicError
     khi một người dùng cố gắng tự theo dõi chính mình.
     """
     log_step("ARRANGE: Tạo một người dùng 'testuser'.")
-    user = User.objects.create_user(username='testuser')
+    user = User.objects.create_user(username="testuser")
 
     log_step("ACT & ASSERT: Gọi service và kiểm tra exception được ném ra.")
     with pytest.raises(BusinessLogicError) as excinfo:
@@ -25,8 +26,8 @@ def test_user_cannot_follow_themselves(log_step): # <<< INJECT FIXTURE VÀO ĐÂ
 
 
 @pytest.mark.django_db
-@pytest.mark.step_log # <<< ĐÁNH DẤU TEST NÀY
-def test_toggle_follow_creates_and_deletes_subscription(log_step): # <<< INJECT FIXTURE VÀO ĐÂY
+@pytest.mark.step_log  # <<< ĐÁNH DẤU TEST NÀY
+def test_toggle_follow_creates_and_deletes_subscription(log_step):  # <<< INJECT FIXTURE VÀO ĐÂY
     """
     KỊCH BẢN 2: Thành công
     Kiểm tra rằng việc gọi toggle_user_follow:
@@ -34,8 +35,8 @@ def test_toggle_follow_creates_and_deletes_subscription(log_step): # <<< INJECT 
     - Lần 2: Sẽ xóa đi đối tượng Subscription đó.
     """
     log_step("ARRANGE: Tạo 2 người dùng 'usera' và 'userb'.")
-    user_a = User.objects.create_user(username='usera')
-    user_b = User.objects.create_user(username='userb')
+    user_a = User.objects.create_user(username="usera")
+    user_b = User.objects.create_user(username="userb")
 
     log_step("--- Lượt 1: Follow ---")
     log_step("ACT: user_a theo dõi user_b.")

@@ -1,10 +1,11 @@
 # apps/listings/tasks/notifications.py
-from celery import shared_task
 import logging
 
-from apps.listings.models import Listing
+from celery import shared_task
+
 from apps.common.utils import firebase
 from apps.common.utils.hashids import hashids
+from apps.listings.models import Listing
 
 logger = logging.getLogger(__name__)
 
@@ -16,24 +17,17 @@ def notify_user_of_listing_rejection(listing_id: int, reason: str):
     """
     logger.info(f"Bắt đầu gửi thông báo từ chối cho chủ sở hữu của Listing ID {listing_id}.")
     try:
-        listing = Listing.objects.select_related('user').get(pk=listing_id)
+        listing = Listing.objects.select_related("user").get(pk=listing_id)
         owner = listing.user
 
         title = "Tin đăng của bạn đã bị tạm ẩn"
-        content = f"Tin đăng \"{listing.title}\" đã bị tạm ẩn vì lý do: {reason}. Bạn có thể kháng nghị nếu cho rằng đây là một sai sót."
+        content = f'Tin đăng "{listing.title}" đã bị tạm ẩn vì lý do: {reason}. Bạn có thể kháng nghị nếu cho rằng đây là một sai sót.'
 
         public_id = hashids.encode(listing.id)
-        related_item = {
-            "type": "listing",
-            "public_id": public_id
-        }
+        related_item = {"type": "listing", "public_id": public_id}
 
         firebase.send_firestore_notification(
-            user_id=owner.id,
-            category="listing_moderation",
-            title=title,
-            content=content,
-            related_item=related_item
+            user_id=owner.id, category="listing_moderation", title=title, content=content, related_item=related_item
         )
 
         logger.info(f"Đã gửi thành công thông báo từ chối cho User ID {owner.id}.")

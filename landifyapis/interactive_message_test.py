@@ -1,8 +1,9 @@
 import asyncio
 import json
+from datetime import datetime, timedelta
+
 import requests
 import websockets
-from datetime import datetime, timedelta
 
 # ==============================================================================
 # === CẤU HÌNH: THAY THẾ BẰNG THÔNG TIN CỦA BẠN ===
@@ -31,6 +32,7 @@ FIREBASE_WEB_API_KEY = "AIzaSyDH-pNSGbTUUbOMsReU46spQ4yv1NQkWsM"
 # === CÁC HÀM TIỆN ÍCH (Tương tự script trước) ===
 # ==============================================================================
 
+
 def get_firebase_id_token(email, password):
     """Lấy Firebase ID Token."""
     # ... (Giữ nguyên hàm này từ script full_chat_test.py)
@@ -39,7 +41,7 @@ def get_firebase_id_token(email, password):
     try:
         response = requests.post(rest_api_url, data=payload)
         response.raise_for_status()
-        return response.json()['idToken']
+        return response.json()["idToken"]
     except requests.exceptions.RequestException as e:
         print(f"❌ Lỗi khi lấy Firebase ID Token cho {email}: {e.response.text}")
         return None
@@ -66,6 +68,7 @@ async def start_chat_session(user_token):
 # === CÁC HÀM MỚI CHO KỊCH BẢN NÀY ===
 # ==============================================================================
 
+
 def create_appointment(user_token, listing_public_id):
     """Gọi API để tạo một lịch hẹn mới."""
     api_url = f"{DJANGO_BASE_URL}/api/appointments/"
@@ -77,7 +80,7 @@ def create_appointment(user_token, listing_public_id):
     data = {
         "listing_public_id": listing_public_id,
         "appointment_date": appointment_time,
-        "note": "Tôi muốn xem nhà, vui lòng xác nhận."
+        "note": "Tôi muốn xem nhà, vui lòng xác nhận.",
     }
 
     try:
@@ -134,31 +137,31 @@ async def listen_for_messages(name, chat_id, token):
 # === KỊCH BẢN TEST CHÍNH ===
 # ==============================================================================
 
+
 async def main():
     print("\n--- BƯỚC 1: LẤY FIREBASE ID TOKEN CHO 2 USER ---")
     user_a_token = get_firebase_id_token(USER_A_EMAIL, USER_A_PASSWORD)
     user_b_token = get_firebase_id_token(USER_B_EMAIL, USER_B_PASSWORD)
-    if not all([user_a_token, user_b_token]): return
+    if not all([user_a_token, user_b_token]):
+        return
 
     print("\n--- BƯỚC 2: USER A TẠO MỘT LỊCH HẸN MỚI ---")
     appointment = create_appointment(user_a_token, LISTING_PUBLIC_ID)
-    if not appointment: return
-    appointment_id = appointment['id']
+    if not appointment:
+        return
+    appointment_id = appointment["id"]
 
     print("\n--- BƯỚC 3: USER A BẮT ĐẦU CUỘC TRÒ CHUYỆN ĐỂ LẤY CHAT_ID ---")
     chat_info = await start_chat_session(user_a_token)
-    if not chat_info: return
-    chat_id = chat_info['chat_id']
+    if not chat_info:
+        return
+    chat_id = chat_info["chat_id"]
 
     print(f"\n--- BƯỚC 4: CẢ 2 USER KẾT NỐI VÀO PHÒNG CHAT {chat_id} ĐỂ LẮNG NGHE ---")
     # Tạo task lắng nghe cho User B
-    listener_task_b = asyncio.create_task(
-        listen_for_messages("User B", chat_id, user_b_token)
-    )
+    listener_task_b = asyncio.create_task(listen_for_messages("User B", chat_id, user_b_token))
     # Tạo task lắng nghe cho User A
-    listener_task_a = asyncio.create_task(
-        listen_for_messages("User A", chat_id, user_a_token)
-    )
+    listener_task_a = asyncio.create_task(listen_for_messages("User A", chat_id, user_a_token))
 
     # Chờ 2 giây để đảm bảo cả hai client đã kết nối WebSocket
     await asyncio.sleep(2)

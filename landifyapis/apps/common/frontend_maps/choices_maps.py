@@ -12,13 +12,12 @@ FEATURE_CHOICES_MAP = {
         {"value": constants.ConditionStatus.NEW, "display_name": "Mới 100%"},
         {"value": constants.ConditionStatus.RENOVATED, "display_name": "Đã cải tạo"},
         {"value": constants.ConditionStatus.GOOD, "display_name": "Tình trạng tốt"},
-        {"value": constants.ConditionStatus.NEEDS_REPAIR, "display_name": "Cần sửa chữa"}
+        {"value": constants.ConditionStatus.NEEDS_REPAIR, "display_name": "Cần sửa chữa"},
     ],
-
     "INTERIOR_STATUS": [
         {"value": constants.InteriorStatus.FULL, "display_name": "Nội thất đầy đủ"},
         {"value": constants.InteriorStatus.BASIC, "display_name": "Nội thất cơ bản"},
-        {"value": constants.InteriorStatus.NONE, "display_name": "Không có nội thất"}
+        {"value": constants.InteriorStatus.NONE, "display_name": "Không có nội thất"},
     ],
 }
 

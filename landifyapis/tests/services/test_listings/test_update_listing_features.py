@@ -1,6 +1,6 @@
 import pytest
+from landifys.models import Listing, ListingPropertyFeatureValue, Property, PropertyFeature, User
 from landifys.services import listings
-from landifys.models import User, Property, Listing, PropertyFeature, ListingPropertyFeatureValue
 
 
 @pytest.mark.django_db
@@ -11,13 +11,13 @@ def test_update_listing_features(log_step):
     Kiểm tra việc thêm mới, cập nhật và xóa các đặc điểm của tin đăng.
     """
     log_step("ARRANGE: Tạo dữ liệu nền (user, listing, features).")
-    user = User.objects.create_user(username='testuser')
+    user = User.objects.create_user(username="testuser")
     prop = Property.objects.create(owner=user, area=1)
-    listing = Listing.objects.create(user=user, property=prop, title='Test Listing')
+    listing = Listing.objects.create(user=user, property=prop, title="Test Listing")
 
-    feature_phong_ngu = PropertyFeature.objects.create(name='Số phòng ngủ', feature_type='FLOAT')
-    feature_ban_cong = PropertyFeature.objects.create(name='Hướng ban công', feature_type='TEXT')
-    feature_do_xe = PropertyFeature.objects.create(name='Có chỗ đỗ xe', feature_type='BOOLEAN')
+    feature_phong_ngu = PropertyFeature.objects.create(name="Số phòng ngủ", feature_type="FLOAT")
+    feature_ban_cong = PropertyFeature.objects.create(name="Hướng ban công", feature_type="TEXT")
+    feature_do_xe = PropertyFeature.objects.create(name="Có chỗ đỗ xe", feature_type="BOOLEAN")
 
     # Gán giá trị ban đầu: 2 phòng ngủ, có chỗ đỗ xe
     ListingPropertyFeatureValue.objects.create(listing=listing, feature=feature_phong_ngu, value=2)
@@ -25,8 +25,8 @@ def test_update_listing_features(log_step):
 
     log_step("ARRANGE: Chuẩn bị dữ liệu mới: 3 phòng ngủ, hướng Đông, không đề cập chỗ đỗ xe.")
     new_features_data = [
-        {'feature_id': feature_phong_ngu.id, 'value': 3.0},  # Cập nhật
-        {'feature_id': feature_ban_cong.id, 'value': 'Đông'}  # Thêm mới
+        {"feature_id": feature_phong_ngu.id, "value": 3.0},  # Cập nhật
+        {"feature_id": feature_ban_cong.id, "value": "Đông"},  # Thêm mới
         # Feature 'Có chỗ đỗ xe' bị loại bỏ
     ]
 
@@ -42,7 +42,7 @@ def test_update_listing_features(log_step):
 
     log_step("ASSERT: Đặc điểm 'Hướng ban công' đã được thêm mới.")
     bc_value = ListingPropertyFeatureValue.objects.get(listing=listing, feature=feature_ban_cong)
-    assert bc_value.value == 'Đông'
+    assert bc_value.value == "Đông"
 
     log_step("ASSERT: Đặc điểm 'Có chỗ đỗ xe' đã bị xóa.")
     assert not ListingPropertyFeatureValue.objects.filter(listing=listing, feature=feature_do_xe).exists()

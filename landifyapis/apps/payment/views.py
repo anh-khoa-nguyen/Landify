@@ -4,18 +4,18 @@ import base64
 import hashlib
 import hmac
 import json
-import requests
 import uuid
 from datetime import timedelta
 
+import requests
 from django.conf import settings
 from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.listings.models import Listing, VipType, ListingVip
 from apps.common.utils.hashids import decode_public_id
+from apps.listings.models import Listing, ListingVip, VipType
 
 MOMO_PARTNER_CODE = getattr(settings, "MOMO_PARTNER_CODE", "")
 MOMO_ACCESS_KEY = getattr(settings, "MOMO_ACCESS_KEY", "")
@@ -27,12 +27,14 @@ MOMO_API_ENDPOINT = "https://test-payment.momo.vn/v2/gateway/api/create"
 
 # ----------------------------------------------------------------
 
+
 class CreateMomoPaymentView(APIView):
     """
     Tạo một yêu cầu thanh toán MoMo cho việc nâng cấp VIP.
     Nhận vào: listing_public_id, vip_type_code, duration_days.
     Trả về: payUrl và các thông tin khác từ MoMo.
     """
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
@@ -43,7 +45,8 @@ class CreateMomoPaymentView(APIView):
         if not all([listing_public_id, vip_type_code, duration_days]):
             return Response(
                 {"error": "Vui lòng cung cấp đủ thông tin (listing_public_id, vip_type_code, duration_days)."},
-                status=status.HTTP_400_BAD_REQUEST)
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         listing_id = decode_public_id(listing_public_id)
         if not listing_id:
@@ -53,10 +56,12 @@ class CreateMomoPaymentView(APIView):
             listing = Listing.objects.get(pk=listing_id, user=request.user)
             vip_type = VipType.objects.get(code=vip_type_code, active=True)
             duration = int(duration_days)
-            if duration <= 0: raise ValueError("Số ngày phải lớn hơn 0")
+            if duration <= 0:
+                raise ValueError("Số ngày phải lớn hơn 0")
         except Listing.DoesNotExist:
-            return Response({"error": "Không tìm thấy tin đăng hoặc bạn không phải chủ sở hữu."},
-                            status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Không tìm thấy tin đăng hoặc bạn không phải chủ sở hữu."}, status=status.HTTP_404_NOT_FOUND
+            )
         except VipType.DoesNotExist:
             return Response({"error": "Gói VIP không hợp lệ."}, status=status.HTTP_404_NOT_FOUND)
         except (ValueError, TypeError):
@@ -78,7 +83,7 @@ class CreateMomoPaymentView(APIView):
         order_info = f"Nang cap VIP {vip_type.name} ({duration} ngay) cho tin dang #{listing.id}"
         extra_data_dict = {"duration_days": duration}
         extra_data_str = json.dumps(extra_data_dict)
-        extra_data_b64 = base64.b64encode(extra_data_str.encode('utf-8')).decode('utf-8')
+        extra_data_b64 = base64.b64encode(extra_data_str.encode("utf-8")).decode("utf-8")
         ipn_url = f"{MOMO_IPN_URL_BASE}{invoice.listing_id}/"
 
         raw_signature = (
@@ -90,10 +95,17 @@ class CreateMomoPaymentView(APIView):
         signature = hmac.new(MOMO_SECRET_KEY.encode(), raw_signature.encode(), hashlib.sha256).hexdigest()
 
         payload = {
-            'partnerCode': MOMO_PARTNER_CODE, 'requestId': request_id, 'amount': str(int(amount)),
-            'orderId': order_id, 'orderInfo': order_info, 'redirectUrl': MOMO_REDIRECT_URL,
-            'ipnUrl': ipn_url, 'lang': 'vi', 'extraData': extra_data_b64, 'requestType': 'captureWallet',
-            'signature': signature,
+            "partnerCode": MOMO_PARTNER_CODE,
+            "requestId": request_id,
+            "amount": str(int(amount)),
+            "orderId": order_id,
+            "orderInfo": order_info,
+            "redirectUrl": MOMO_REDIRECT_URL,
+            "ipnUrl": ipn_url,
+            "lang": "vi",
+            "extraData": extra_data_b64,
+            "requestType": "captureWallet",
+            "signature": signature,
         }
 
         try:
@@ -120,6 +132,7 @@ class ConfirmMomoPaymentView(APIView):
     Nhận thông báo IPN (Instant Payment Notification) từ server MoMo.
     URL này phải được public và không yêu cầu xác thực.
     """
+
     permission_classes = [permissions.AllowAny]
 
     def verify_signature(self, data) -> bool:
@@ -133,7 +146,7 @@ class ConfirmMomoPaymentView(APIView):
                 f"&requestId={data.get('requestId')}&responseTime={data.get('responseTime')}"
                 f"&resultCode={data.get('resultCode')}&transId={data.get('transId')}"
             )
-            momo_signature = data.get('signature')
+            momo_signature = data.get("signature")
             computed_signature = hmac.new(MOMO_SECRET_KEY.encode(), raw_signature.encode(), hashlib.sha256).hexdigest()
             return computed_signature == momo_signature
         except Exception as e:
@@ -156,15 +169,16 @@ class ConfirmMomoPaymentView(APIView):
         if invoice.payment_status == ListingVip.PaymentStatus.PAID:
             return Response(status=status.HTTP_200_OK)
 
-        result_code = response_data.get('resultCode')
+        result_code = response_data.get("resultCode")
 
         if result_code == 0:
             try:
-                extra_data_b64 = response_data.get('extraData', '')
-                extra_data_str = base64.b64decode(extra_data_b64).decode('utf-8')
+                extra_data_b64 = response_data.get("extraData", "")
+                extra_data_str = base64.b64decode(extra_data_b64).decode("utf-8")
                 extra_data_dict = json.loads(extra_data_str)
                 duration_days = int(extra_data_dict.get("duration_days", 0))
-                if duration_days <= 0: raise ValueError("Invalid duration_days in extraData")
+                if duration_days <= 0:
+                    raise ValueError("Invalid duration_days in extraData")
             except Exception as e:
                 print(f"ERROR parsing extraData from IPN: {e}")
                 invoice.payment_status = ListingVip.PaymentStatus.FAILED
@@ -177,7 +191,7 @@ class ConfirmMomoPaymentView(APIView):
 
             invoice.end_date = start_point + timedelta(days=duration_days)
             invoice.payment_status = ListingVip.PaymentStatus.PAID
-            invoice.payment_code = response_data.get('transId')  # Lưu mã giao dịch thành công của MoMo
+            invoice.payment_code = response_data.get("transId")  # Lưu mã giao dịch thành công của MoMo
             invoice.save()
         else:
             invoice.payment_status = ListingVip.PaymentStatus.FAILED

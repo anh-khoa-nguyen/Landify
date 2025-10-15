@@ -1,12 +1,13 @@
 from django.db import transaction
 
-from apps.common.tasks import notifications
 from apps.common.services import BusinessLogicError, ProtestResolutionError
-#from apps.common.tasks import notifications as moderation_tasks
+from apps.common.tasks import notifications
+
+# from apps.common.tasks import notifications as moderation_tasks
 from apps.listings.models import Listing
 from apps.users.models import User
 
-from .models import Protest, ModerationAction, Report
+from .models import ModerationAction, Protest, Report
 from .serializers import ProtestSerializer
 
 # ==============================================================================
@@ -15,21 +16,18 @@ from .serializers import ProtestSerializer
 # Các hàm này xử lý giai đoạn sau của quy trình kiểm duyệt: khi người dùng
 # kháng nghị một hành động và admin đưa ra quyết định cuối cùng.
 
+
 def create_protest(*, action: ModerationAction, protester: User, reason: str) -> Protest:
     """Tạo một kháng nghị cho một hành động xử lý."""
     # Kiểm tra xem người kháng nghị có phải là chủ sở hữu của nội dung không
-    target_owner = getattr(action.target_object, 'user', None) or getattr(action.target_object, 'owner', None)
+    target_owner = getattr(action.target_object, "user", None) or getattr(action.target_object, "owner", None)
     if protester != target_owner:
         raise BusinessLogicError("Bạn không có quyền kháng nghị cho hành động này.")
 
-    if hasattr(action, 'protest'):
+    if hasattr(action, "protest"):
         raise BusinessLogicError("Hành động này đã được kháng nghị trước đó.")
 
-    protest = Protest.objects.create(
-        action=action,
-        protester=protester,
-        reason=reason
-    )
+    protest = Protest.objects.create(action=action, protester=protester, reason=reason)
 
     # Gửi thông báo cho các admin về kháng nghị mới
     title = f"Kháng nghị mới cho hành động #{action.id}"
@@ -40,6 +38,7 @@ def create_protest(*, action: ModerationAction, protester: User, reason: str) ->
     )
 
     return protest
+
 
 def resolve_protest(*, protest: Protest, admin_user: User, new_status: str, note: str) -> Protest:
     """Xử lý một kháng nghị (chấp thuận hoặc từ chối)."""
@@ -57,9 +56,9 @@ def resolve_protest(*, protest: Protest, admin_user: User, new_status: str, note
         # Nếu chấp thuận kháng nghị -> Khôi phục lại nội dung
         if new_status == Protest.Status.RESOLVED:
             target_object = protest.action.target_object
-            if hasattr(target_object, 'active'):
+            if hasattr(target_object, "active"):
                 target_object.active = True
-                target_object.save(update_fields=['active'])
+                target_object.save(update_fields=["active"])
                 # (Tùy chọn) Tạo một ModerationAction khác loại RESTORE_CONTENT để ghi lại
 
     # Gửi thông báo kết quả cho người dùng
@@ -71,7 +70,7 @@ def resolve_protest(*, protest: Protest, admin_user: User, new_status: str, note
         category="protest_resolution",
         title=title,
         content=content,
-        related_item=related_item
+        related_item=related_item,
     )
 
     return protest

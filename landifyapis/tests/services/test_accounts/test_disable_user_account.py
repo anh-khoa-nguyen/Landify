@@ -1,6 +1,6 @@
 import pytest
-from landifys.services import accounts, BusinessLogicError
 from landifys.models import User
+from landifys.services import BusinessLogicError, accounts
 
 
 @pytest.mark.django_db
@@ -8,7 +8,7 @@ from landifys.models import User
 def test_admin_cannot_disable_themselves(log_step):
     """KỊCH BẢN: Thất bại - Admin không thể tự vô hiệu hóa mình."""
     log_step("ARRANGE: Tạo một admin.")
-    admin_user = User.objects.create_user(username='admin', role=User.Role.ADMIN)
+    admin_user = User.objects.create_user(username="admin", role=User.Role.ADMIN)
 
     log_step("ACT & ASSERT: Kiểm tra exception khi admin tự vô hiệu hóa.")
     with pytest.raises(BusinessLogicError, match="Không thể vô hiệu hóa tài khoản này."):
@@ -21,8 +21,8 @@ def test_admin_cannot_disable_themselves(log_step):
 def test_disable_and_reenable_user(log_step):
     """KỊCH BẢN: Thành công - Vô hiệu hóa và kích hoạt lại người dùng."""
     log_step("ARRANGE: Tạo một admin và một người dùng thường đang hoạt động.")
-    admin_user = User.objects.create_user(username='admin', role=User.Role.ADMIN)
-    regular_user = User.objects.create_user(username='testuser', is_active=True)
+    admin_user = User.objects.create_user(username="admin", role=User.Role.ADMIN)
+    regular_user = User.objects.create_user(username="testuser", is_active=True)
 
     log_step("--- Lượt 1: Vô hiệu hóa ---")
     log_step("ACT: Admin vô hiệu hóa người dùng.")

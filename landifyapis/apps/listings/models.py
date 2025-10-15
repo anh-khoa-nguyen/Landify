@@ -1,13 +1,13 @@
 import builtins
-from django.contrib.humanize.templatetags.humanize import intcomma
 from datetime import timedelta
-from django.utils import timezone
 
 from ckeditor.fields import RichTextField
+from django.contrib.humanize.templatetags.humanize import intcomma
 from django.db import models
+from django.utils import timezone
 
 from apps.common.models import BaseModel
-from apps.properties.models import Property, PropertyType, PropertyFeature, Direction
+from apps.properties.models import Direction, Property, PropertyFeature, PropertyType
 from apps.users.models import User
 
 # ==============================================================================
@@ -15,6 +15,7 @@ from apps.users.models import User
 # ==============================================================================
 # Các model này định nghĩa các tùy chọn, loại hình và quy tắc cơ bản
 # cho việc tạo và phân loại tin đăng.
+
 
 class UnitPrice(models.Model):
     name = models.CharField(max_length=50, unique=True, verbose_name="Tên đơn vị")  # Ví dụ: "triệu/m²", "tỷ"
@@ -28,16 +29,14 @@ class UnitPrice(models.Model):
         verbose_name = "Đơn vị giá"
         verbose_name_plural = "Các Đơn vị giá"
 
+
 class ListingType(BaseModel):
     name = models.CharField(max_length=50, unique=True)
-    code = models.CharField(max_length=50, unique=True,
-        help_text="Mã định danh không đổi, ví dụ: BUY_SELL, RENT, PROJECT")
-
-    applicable_unit_prices = models.ManyToManyField(
-        'UnitPrice',
-        blank=True,
-        verbose_name="Các đơn vị giá áp dụng"
+    code = models.CharField(
+        max_length=50, unique=True, help_text="Mã định danh không đổi, ví dụ: BUY_SELL, RENT, PROJECT"
     )
+
+    applicable_unit_prices = models.ManyToManyField("UnitPrice", blank=True, verbose_name="Các đơn vị giá áp dụng")
 
     def __str__(self):
         return self.name
@@ -45,6 +44,7 @@ class ListingType(BaseModel):
     class Meta:
         verbose_name = "Loại tin đăng"
         verbose_name_plural = "Các Loại tin đăng"
+
 
 class ListingCategory(BaseModel):
     """
@@ -54,12 +54,10 @@ class ListingCategory(BaseModel):
     """
 
     listing_type = models.ForeignKey(ListingType, on_delete=models.CASCADE)
-    property_type = models.ForeignKey('properties.PropertyType', on_delete=models.CASCADE)
+    property_type = models.ForeignKey("properties.PropertyType", on_delete=models.CASCADE)
 
     applicable_features = models.ManyToManyField(
-        'properties.PropertyFeature',
-        blank=True,
-        verbose_name="Các đặc điểm áp dụng"
+        "properties.PropertyFeature", blank=True, verbose_name="Các đặc điểm áp dụng"
     )
 
     @property
@@ -72,14 +70,16 @@ class ListingCategory(BaseModel):
     class Meta:
         verbose_name = "Danh mục Đăng tin"
         verbose_name_plural = "Các Danh mục Đăng tin"
-        unique_together = ('listing_type', 'property_type')
-        ordering = ['listing_type__name', 'property_type__name']
+        unique_together = ("listing_type", "property_type")
+        ordering = ["listing_type__name", "property_type__name"]
+
 
 # ==============================================================================
 # BUSINESS & PROMOTION MODELS
 # ==============================================================================
 # Các model này quản lý logic kinh doanh, chẳng hạn như các gói VIP,
 # quy tắc khuyến mãi và các mã giảm giá cụ thể của người dùng.
+
 
 class VipType(BaseModel):
     """
@@ -101,6 +101,7 @@ class VipType(BaseModel):
         verbose_name = "Loại tin VIP"
         verbose_name_plural = "Các loại tin VIP"
         ordering = ["-sort_priority"]
+
 
 class PromotionRule(BaseModel):
     """
@@ -124,15 +125,13 @@ class PromotionRule(BaseModel):
     applicable_vip_types = models.ManyToManyField(VipType, blank=True, verbose_name="Áp dụng cho các gói VIP")
 
     trigger_event = models.CharField(
-        max_length=20,
-        choices=TriggerEvent.choices,
-        default=TriggerEvent.MANUAL,
-        verbose_name="Sự kiện kích hoạt"
+        max_length=20, choices=TriggerEvent.choices, default=TriggerEvent.MANUAL, verbose_name="Sự kiện kích hoạt"
     )
     validity_duration = models.PositiveIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         verbose_name="Thời hạn hiệu lực (số ngày)",
-        help_text="Để trống nếu KM được gán thủ công với ngày hết hạn cụ thể."
+        help_text="Để trống nếu KM được gán thủ công với ngày hết hạn cụ thể.",
     )
 
     def __str__(self):
@@ -142,11 +141,13 @@ class PromotionRule(BaseModel):
         verbose_name = "Quy tắc Khuyến mãi"
         verbose_name_plural = "Các Quy tắc Khuyến mãi"
 
+
 # ==============================================================================
 # CORE LISTING MODELS
 # ==============================================================================
 # Đây là các model trung tâm của ứng dụng, chứa dữ liệu chính của tin đăng
 # và các thông tin mở rộng liên quan trực tiếp.
+
 
 class ListingPropertyFeatureValue(BaseModel):
     """
@@ -182,6 +183,7 @@ class ListingPropertyFeatureValue(BaseModel):
         verbose_name_plural = "Các Giá trị Đặc điểm của Tin đăng"
         unique_together = ("listing", "feature")
 
+
 class Listing(BaseModel):
     """Model Tin đăng - Chứa thông tin của một lần chào bán/cho thuê."""
 
@@ -205,13 +207,12 @@ class Listing(BaseModel):
         on_delete=models.SET_NULL,
         null=True,  # Cho phép null để không ảnh hưởng đến các tin đăng cũ
         related_name="listings",
-        verbose_name="Danh mục tin đăng"
+        verbose_name="Danh mục tin đăng",
     )
     title = models.CharField(max_length=255, verbose_name="Tiêu đề")
     content = RichTextField(verbose_name="Nội dung")
     price_value = models.DecimalField(
-        max_digits=19, decimal_places=2, null=True, blank=True, verbose_name="Giá trị (số)",
-        db_index=True
+        max_digits=19, decimal_places=2, null=True, blank=True, verbose_name="Giá trị (số)", db_index=True
     )
     unit_price = models.ForeignKey(
         UnitPrice, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Đơn vị giá"
@@ -232,8 +233,9 @@ class Listing(BaseModel):
     commission_percentage = models.FloatField(verbose_name="Phần trăm hoa hồng (%)", default=0.0)
 
     scam_score = models.FloatField(null=True, blank=True, verbose_name="Điểm Scam (từ AI)")
-    scam_detector_version = models.CharField(max_length=50, blank=True, null=True,
-                                             verbose_name="Phiên bản AI phát hiện")
+    scam_detector_version = models.CharField(
+        max_length=50, blank=True, null=True, verbose_name="Phiên bản AI phát hiện"
+    )
 
     @builtins.property
     def display_price(self):
@@ -246,7 +248,7 @@ class Listing(BaseModel):
             return f"{formatted_value} VND"  # Mặc định là VND nếu không có đơn vị
 
             # Nếu đơn vị là VND, chỉ cần thêm "VND"
-        if self.unit_price.code == 'VND':
+        if self.unit_price.code == "VND":
             return f"{formatted_value} VND"
 
             # Nếu là các đơn vị khác, nối số và đơn vị lại
@@ -260,10 +262,12 @@ class Listing(BaseModel):
         verbose_name = "Tin đăng"
         verbose_name_plural = "Các Tin đăng"
 
-class ListingVip(BaseModel): # Vẫn kế thừa BaseModel để có created_date, updated_date
+
+class ListingVip(BaseModel):  # Vẫn kế thừa BaseModel để có created_date, updated_date
     """
     Lưu trữ trạng thái VIP hiện tại của một Tin đăng.
     """
+
     class PaymentStatus(models.TextChoices):
         PENDING = "PENDING", "Chờ thanh toán"
         PAID = "PAID", "Đã thanh toán"
@@ -273,35 +277,16 @@ class ListingVip(BaseModel): # Vẫn kế thừa BaseModel để có created_dat
         MOMO = "MOMO", "Ví MoMo"
         BANK_TRANSFER = "BANK", "Chuyển khoản"
 
-    listing = models.OneToOneField( # <-- THAY ĐỔI: OneToOneField
-        Listing,
-        on_delete=models.CASCADE,
-        related_name="vip_status",
-        verbose_name="Tin đăng",
-        primary_key=True
+    listing = models.OneToOneField(  # <-- THAY ĐỔI: OneToOneField
+        Listing, on_delete=models.CASCADE, related_name="vip_status", verbose_name="Tin đăng", primary_key=True
     )
-    vip_type = models.ForeignKey(
-        VipType,
-        on_delete=models.SET_NULL,
-        null=True,
-        verbose_name="Loại gói VIP hiện tại"
-    )
+    vip_type = models.ForeignKey(VipType, on_delete=models.SET_NULL, null=True, verbose_name="Loại gói VIP hiện tại")
 
-    end_date = models.DateTimeField(
-        verbose_name="Ngày kết thúc VIP",
-        null=True,
-        blank=True
-    )
+    end_date = models.DateTimeField(verbose_name="Ngày kết thúc VIP", null=True, blank=True)
 
-    amount = models.DecimalField(
-        max_digits=19, decimal_places=2, default=0, verbose_name="Số tiền thanh toán"
-    )
-    payment_status = models.CharField(
-        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING
-    )
-    payment_method = models.CharField(
-        max_length=50, choices=PaymentMethod.choices, null=True, blank=True
-    )
+    amount = models.DecimalField(max_digits=19, decimal_places=2, default=0, verbose_name="Số tiền thanh toán")
+    payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
+    payment_method = models.CharField(max_length=50, choices=PaymentMethod.choices, null=True, blank=True)
     # Lưu requestId hoặc orderId để đối soát với MoMo
     payment_code = models.CharField(max_length=255, null=True, blank=True)
     # URL thanh toán do MoMo trả về
@@ -323,9 +308,11 @@ class ListingVip(BaseModel): # Vẫn kế thừa BaseModel để có created_dat
         verbose_name = "Trạng thái VIP & Hóa đơn"
         verbose_name_plural = "Các trạng thái VIP & Hóa đơn"
 
+
 # ==============================================================================
 # USER
 # ==============================================================================
+
 
 class UserPromotion(BaseModel):
     """
@@ -353,4 +340,4 @@ class UserPromotion(BaseModel):
     class Meta:
         verbose_name = "Khuyến mãi của Người dùng"
         verbose_name_plural = "Các Khuyến mãi của Người dùng"
-        ordering = ['-expiry_date']
+        ordering = ["-expiry_date"]

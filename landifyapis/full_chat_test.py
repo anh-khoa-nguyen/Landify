@@ -1,8 +1,9 @@
 import asyncio
 import json
+
+import firebase_admin
 import requests
 import websockets
-import firebase_admin
 from firebase_admin import credentials
 
 # ==============================================================================
@@ -42,18 +43,15 @@ except Exception as e:
 # === CÁC HÀM TIỆN ÍCH ===
 # ==============================================================================
 
+
 def get_firebase_id_token(email, password):
     """Mô phỏng việc đăng nhập để lấy Firebase ID Token."""
     rest_api_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_WEB_API_KEY}"
-    payload = json.dumps({
-        "email": email,
-        "password": password,
-        "returnSecureToken": True
-    })
+    payload = json.dumps({"email": email, "password": password, "returnSecureToken": True})
     try:
         response = requests.post(rest_api_url, data=payload)
         response.raise_for_status()
-        return response.json()['idToken']
+        return response.json()["idToken"]
     except requests.exceptions.RequestException as e:
         print(f"❌ Lỗi khi lấy Firebase ID Token cho {email}: {e.response.text}")
         return None
@@ -62,10 +60,7 @@ def get_firebase_id_token(email, password):
 async def start_chat_session(user_token):
     """Gọi API /chats/start/ để lấy thông tin phòng chat."""
     api_url = f"{DJANGO_BASE_URL}/api/chats/start/"
-    headers = {
-        "Authorization": f"Bearer {user_token}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {user_token}", "Content-Type": "application/json"}
     data = {"public_id": LISTING_PUBLIC_ID}
 
     try:
@@ -128,6 +123,7 @@ async def run_chat_client(name, chat_id, token, message_to_send):
 # === KỊCH BẢN TEST CHÍNH ===
 # ==============================================================================
 
+
 async def main():
     print("\n--- BƯỚC 1: LẤY FIREBASE ID TOKEN CHO 2 USER ---")
     user_a_token = get_firebase_id_token(USER_A_EMAIL, USER_A_PASSWORD)
@@ -144,7 +140,7 @@ async def main():
         return
 
     # SỬA LẠI KEY Ở ĐÂY CHO KHỚP VỚI RESPONSE MỚI CỦA API
-    postgres_chat_id = chat_info['chat_id']
+    postgres_chat_id = chat_info["chat_id"]
 
     print("\n--- BƯỚC 3: CẢ 2 USER CÙNG KẾT NỐI VÀO PHÒNG CHAT ---")
     print("User A sẽ gửi tin nhắn, User B sẽ lắng nghe.")
@@ -153,9 +149,7 @@ async def main():
     task_a = asyncio.create_task(
         run_chat_client("User A", postgres_chat_id, user_a_token, "Chào User B, tôi là User A đây!")
     )
-    task_b = asyncio.create_task(
-        run_chat_client("User B", postgres_chat_id, user_b_token, None)
-    )
+    task_b = asyncio.create_task(run_chat_client("User B", postgres_chat_id, user_b_token, None))
 
     # Chờ cả hai task hoàn thành
     await asyncio.gather(task_a, task_b)

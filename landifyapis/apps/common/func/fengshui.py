@@ -6,6 +6,7 @@ from django.conf import settings
 
 # --- NẠP QUY TẮC PHONG THỦY MỘT CÁCH HIỆU QUẢ ---
 
+
 @lru_cache(maxsize=1)
 def _load_feng_shui_rules():
     """

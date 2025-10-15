@@ -18,14 +18,16 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 
 # Tự động tìm tất cả các file tasks.py trong các app đã đăng ký trong INSTALLED_APPS.
 # Celery sẽ tự động đăng ký các tác vụ được định nghĩa trong các file đó.
-app.autodiscover_tasks(packages=[
-    'apps.common.tasks.notifications',
-    'apps.common.tasks.stats',
-    'apps.common.tasks.prices',
-    'apps.listings.tasks.moderation',
-    'apps.listings.tasks.notifications',
-    'apps.users.tasks.notifications',
-])
+app.autodiscover_tasks(
+    packages=[
+        "apps.common.tasks.notifications",
+        "apps.common.tasks.stats",
+        "apps.common.tasks.prices",
+        "apps.listings.tasks.moderation",
+        "apps.listings.tasks.notifications",
+        "apps.users.tasks.notifications",
+    ]
+)
 
 
 @app.task(bind=True, ignore_result=True)

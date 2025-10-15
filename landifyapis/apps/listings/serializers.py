@@ -1,30 +1,38 @@
 # apps/properties/serializers.py
 from datetime import date
-from django.contrib.humanize.templatetags.humanize import intcomma
-from apps.common.models import GeoGridStatistic # Đảm bảo import đúng model mới
-from apps.common.utils.geogrid import geogrid_converter # Import converter
 
+from django.contrib.humanize.templatetags.humanize import intcomma
 from django.utils import timezone
 from rest_framework import serializers
 from vi_address.models import Ward
-from . import constants # Import file constants của bạn
 
-from apps.common.mixins import DynamicFieldsMixin
 from apps.common.frontend_maps import feature_maps
-from apps.users.serializers import UserSerializer
-from apps.properties.serializers import PropertySerializer, PropertyFeatureSerializer, LocationSerializer
+from apps.common.mixins import DynamicFieldsMixin
+from apps.common.models import GeoGridStatistic  # Đảm bảo import đúng model mới
+from apps.common.utils.geogrid import geogrid_converter  # Import converter
 from apps.common.utils.hashids import hashids
-from apps.properties.models import Property, PropertyType, PropertyFeature, Direction, LegalStatus
+from apps.properties.models import Direction, LegalStatus, Property, PropertyFeature, PropertyType
+from apps.properties.serializers import LocationSerializer, PropertyFeatureSerializer, PropertySerializer
+from apps.users.serializers import UserSerializer
 
-from .models import ListingPropertyFeatureValue, Listing, ListingType, UnitPrice, VipType, UserPromotion, \
-    ListingCategory
 # from .models import BuySellDetail, ProjectDetail, RentalDetail
+from . import constants  # Import file constants của bạn
 from . import services as listings_services
+from .models import (
+    Listing,
+    ListingCategory,
+    ListingPropertyFeatureValue,
+    ListingType,
+    UnitPrice,
+    UserPromotion,
+    VipType,
+)
 
 # ==============================================================================
 # SERIALIZER CHO CÁC THÀNH PHẦN PHỤ / HELPER
 # ==============================================================================
 # Các serializer nhỏ, dùng để lồng vào các serializer lớn hơn.
+
 
 class ListingPropertyFeatureValueSerializer(serializers.ModelSerializer):
     """Serializer cho bảng trung gian, lồng thông tin chi tiết của Feature."""
@@ -35,16 +43,19 @@ class ListingPropertyFeatureValueSerializer(serializers.ModelSerializer):
         model = ListingPropertyFeatureValue
         fields = ["feature", "value"]
 
+
 # ==============================================================================
 # SERIALIZER ĐỌC DỮ LIỆU (READ / OUTPUT)
 # ==============================================================================
 # Các serializer này chuyên để định dạng và trả dữ liệu về cho client.
+
 
 class ListingPreviewSerializer(serializers.ModelSerializer):
     """
     Serializer chuyên dụng để hiển thị tin đăng ở dạng xem trước (preview).
     Nó làm phẳng cấu trúc dữ liệu và chỉ trả về các thông tin cần thiết cho UI.
     """
+
     public_id = serializers.SerializerMethodField()
     tag = serializers.SerializerMethodField()
     display_price = serializers.CharField(read_only=True)
@@ -57,7 +68,7 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
     agent_name = serializers.CharField(source="user.get_full_name", read_only=True)
     agent_avatar = serializers.URLField(source="user.profile.avatar.url", read_only=True, allow_null=True)
     agent_phone = serializers.CharField(source="user.phone_number", read_only=True)
-    owner_id = serializers.IntegerField(source='user.id', read_only=True)
+    owner_id = serializers.IntegerField(source="user.id", read_only=True)
     image_urls = serializers.SerializerMethodField()
     total_image_count = serializers.SerializerMethodField()
     total_video_count = serializers.SerializerMethodField()
@@ -69,27 +80,27 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Listing
         fields = [
-            'public_id',
-            'title',
-            'tag',
-            'display_price',
-            'price_value',
-            'unit_price_code',
-            'area',
-            'beds',
-            'baths',
-            'address',
-            'agent_name',
-            'agent_avatar',
-            'agent_phone',
-            'owner_id',
-            'image_urls',
-            'total_image_count',
-            'total_video_count',
-            'created_date',
-            'is_in_wishlist',
-            'distance_km',
-            'potential_score',
+            "public_id",
+            "title",
+            "tag",
+            "display_price",
+            "price_value",
+            "unit_price_code",
+            "area",
+            "beds",
+            "baths",
+            "address",
+            "agent_name",
+            "agent_avatar",
+            "agent_phone",
+            "owner_id",
+            "image_urls",
+            "total_image_count",
+            "total_video_count",
+            "created_date",
+            "is_in_wishlist",
+            "distance_km",
+            "potential_score",
         ]
 
     def get_public_id(self, obj: Listing) -> str:
@@ -109,8 +120,8 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
     def get_address(self, obj: Listing) -> str:
         location = obj.property.location
         if location:
-            district_name = getattr(location.district, 'name', None)
-            city_name = getattr(location.city, 'name', None)
+            district_name = getattr(location.district, "name", None)
+            city_name = getattr(location.city, "name", None)
 
             # Xây dựng danh sách các phần của địa chỉ
             parts = []
@@ -136,22 +147,22 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
             return None
 
     def get_beds(self, obj: Listing) -> int | None:
-        beds_float = self._get_feature_value(obj, 'NUM_BEDROOMS')
+        beds_float = self._get_feature_value(obj, "NUM_BEDROOMS")
         return int(beds_float) if beds_float is not None else None
 
     def get_baths(self, obj: Listing) -> int | None:
-        baths_float = self._get_feature_value(obj, 'NUM_BATHROOMS')
+        baths_float = self._get_feature_value(obj, "NUM_BATHROOMS")
         return int(baths_float) if baths_float is not None else None
 
     def get_image_urls(self, obj: Listing) -> list[str]:
-        if not hasattr(obj.property, 'media'):
+        if not hasattr(obj.property, "media"):
             return []
         # Tối ưu: Lấy 4 ảnh đầu tiên
         media = obj.property.media.all()[:4]
-        return [item.url.url for item in media if hasattr(item.url, 'url')]
+        return [item.url.url for item in media if hasattr(item.url, "url")]
 
     def get_total_image_count(self, obj: Listing) -> int:
-        if not hasattr(obj.property, 'media'):
+        if not hasattr(obj.property, "media"):
             return 0
         # Cần logic phân biệt ảnh/video dựa trên resource_type của Cloudinary
         return obj.property.media.all().count()
@@ -161,27 +172,33 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
         return 0
 
     def get_is_in_wishlist(self, obj: Listing) -> bool:
-        request = self.context.get('request')
-        if request and hasattr(request, 'user') and request.user.is_authenticated:
+        request = self.context.get("request")
+        if request and hasattr(request, "user") and request.user.is_authenticated:
             return obj.wishlisted_by.filter(user=request.user).exists()
         return False
 
     def get_distance_km(self, obj: Listing) -> float | None:
-        if hasattr(obj, 'distance'):
+        if hasattr(obj, "distance"):
             return round(obj.distance_km, 2)
         return None
+
 
 class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """
     Serializer chuyên dụng cho việc ĐỌC (hiển thị) dữ liệu Listing.
     Nó bao gồm các trường lồng nhau và các trường ảo được định dạng đẹp.
     """
+
     public_id = serializers.SerializerMethodField()
     user = UserSerializer(read_only=True)
     property = PropertySerializer(read_only=True)
 
-    listing_type_name = serializers.CharField(source="listing_category.listing_type.name", read_only=True, allow_null=True)
-    property_type_name = serializers.CharField(source="listing_category.property_type.name", read_only=True, allow_null=True)
+    listing_type_name = serializers.CharField(
+        source="listing_category.listing_type.name", read_only=True, allow_null=True
+    )
+    property_type_name = serializers.CharField(
+        source="listing_category.property_type.name", read_only=True, allow_null=True
+    )
 
     unit_price_name = serializers.CharField(source="unit_price.name", read_only=True, allow_null=True)
     unit_price_code = serializers.CharField(source="unit_price.code", read_only=True, allow_null=True)
@@ -211,7 +228,7 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "commission_percentage",
             "created_date",
             "feature_values",
-            "price_analysis"
+            "price_analysis",
         ]
 
     def get_public_id(self, obj):
@@ -223,8 +240,9 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         dựa trên dữ liệu từ JSONField đã được tính toán trước.
         """
         # 1. Kiểm tra các điều kiện cần thiết
-        if not all([obj.listing_category, obj.property.location, obj.property.location.point, obj.price_value,
-                    obj.unit_price]):
+        if not all(
+            [obj.listing_category, obj.property.location, obj.property.location.point, obj.price_value, obj.unit_price]
+        ):
             return None
 
         # 2. Lấy ô lưới và truy vấn bản ghi thống kê
@@ -256,9 +274,9 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         listing_type_code = obj.listing_category.listing_type.code
         unit_price_code = obj.unit_price.code
 
-        if listing_type_code == 'RENT':
+        if listing_type_code == "RENT":
             unit_text = "VND/tháng"
-        elif listing_type_code == 'BUY_SELL' and unit_price_code == 'PER_M2':
+        elif listing_type_code == "BUY_SELL" and unit_price_code == "PER_M2":
             unit_text = "/m²"
 
         # 6. Tính toán chênh lệch và đưa ra nhận định
@@ -284,31 +302,36 @@ class ListingDetailSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "listing_count": category_stats.get("count"),
         }
 
+
 # ==============================================================================
 # SERIALIZER GHI DỮ LIỆU (CREATE / UPDATE)
 # ==============================================================================
 # Các serializer này chuyên để nhận, validate và xử lý dữ liệu đầu vào từ client.
 
+
 class FeatureInputSerializer(serializers.Serializer):
     """Serializer để nhận dữ liệu feature đầu vào khi tạo/cập nhật listing."""
+
     feature_code = serializers.CharField()
     value = serializers.JSONField()
+
 
 class VipPackageCreateSerializer(serializers.Serializer):
     """
     Serializer con để validate dữ liệu gói VIP khi tạo tin đăng.
     Nó không liên kết với model nào cả (không phải ModelSerializer).
     """
+
     vip_type_code = serializers.SlugRelatedField(
-        slug_field='code',
+        slug_field="code",
         queryset=VipType.objects.filter(active=True),
-        source='vip_type' # Khi validate thành công, validated_data sẽ có key 'vip_type' là một object VipType
+        source="vip_type",  # Khi validate thành công, validated_data sẽ có key 'vip_type' là một object VipType
     )
     duration_days = serializers.IntegerField(min_value=1, help_text="Số ngày mua VIP.")
     start_date = serializers.DateField(
         format="%Y-%m-%d",
-        required=False, # Không bắt buộc, nếu thiếu sẽ lấy ngày hiện tại
-        help_text="Ngày bắt đầu kích hoạt VIP (YYYY-MM-DD)."
+        required=False,  # Không bắt buộc, nếu thiếu sẽ lấy ngày hiện tại
+        help_text="Ngày bắt đầu kích hoạt VIP (YYYY-MM-DD).",
     )
 
     def validate_start_date(self, value):
@@ -319,24 +342,23 @@ class VipPackageCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Ngày bắt đầu không thể là một ngày trong quá khứ.")
         return value
 
+
 class PropertyCreateNestedSerializer(serializers.ModelSerializer):
     """Serializer con chỉ dùng để TẠO Property lồng nhau."""
-    location = LocationSerializer() # Giữ nguyên
+
+    location = LocationSerializer()  # Giữ nguyên
 
     direction = serializers.SlugRelatedField(
-        slug_field='code',
-        queryset=Direction.objects.all(),
-        required=False # Cho phép không bắt buộc
+        slug_field="code", queryset=Direction.objects.all(), required=False  # Cho phép không bắt buộc
     )
     legal_status = serializers.SlugRelatedField(
-        slug_field='code',
-        queryset=LegalStatus.objects.all(),
-        required=False # Cho phép không bắt buộc
+        slug_field="code", queryset=LegalStatus.objects.all(), required=False  # Cho phép không bắt buộc
     )
 
     class Meta:
         model = Property
-        fields = ['area', 'direction', 'legal_status', 'location']
+        fields = ["area", "direction", "legal_status", "location"]
+
 
 class ListingCreateSerializer(serializers.ModelSerializer):
     """
@@ -350,14 +372,11 @@ class ListingCreateSerializer(serializers.ModelSerializer):
     )
 
     listing_category = serializers.PrimaryKeyRelatedField(
-        queryset=ListingCategory.objects.select_related('listing_type', 'property_type').all(),
+        queryset=ListingCategory.objects.select_related("listing_type", "property_type").all(),
         write_only=True,
     )
 
-    unit_price = serializers.SlugRelatedField(
-        slug_field='code',
-        queryset=UnitPrice.objects.all()
-    )
+    unit_price = serializers.SlugRelatedField(slug_field="code", queryset=UnitPrice.objects.all())
     features = FeatureInputSerializer(many=True, required=False, write_only=True)
     vip_package = VipPackageCreateSerializer(required=False, write_only=True)
     promotion_code = serializers.CharField(required=False, write_only=True, allow_blank=True)
@@ -397,7 +416,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         if not features_data:
             return features_data
 
-        feature_codes = [item.get('feature_code') for item in features_data if item.get('feature_code')]
+        feature_codes = [item.get("feature_code") for item in features_data if item.get("feature_code")]
         features_map = {f.code: f for f in PropertyFeature.objects.filter(code__in=feature_codes)}
 
         choice_constants_map = {
@@ -406,8 +425,8 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         }
 
         for item in features_data:
-            code = item.get('feature_code')
-            value = item.get('value')
+            code = item.get("feature_code")
+            value = item.get("value")
 
             feature_obj = features_map.get(code)
 
@@ -422,7 +441,9 @@ class ListingCreateSerializer(serializers.ModelSerializer):
 
             elif feature_type == PropertyFeature.FeatureType.BOOLEAN:
                 if not isinstance(value, bool):
-                    raise serializers.ValidationError(f"Đặc điểm '{feature_obj.name}' yêu cầu giá trị true hoặc false.")
+                    raise serializers.ValidationError(
+                        f"Đặc điểm '{feature_obj.name}' yêu cầu giá trị true hoặc false."
+                    )
 
             elif feature_type == PropertyFeature.FeatureType.DIRECTION:
                 if not isinstance(value, int) or not Direction.objects.filter(pk=value).exists():
@@ -432,8 +453,9 @@ class ListingCreateSerializer(serializers.ModelSerializer):
                 constant_class = choice_constants_map.get(code)
                 if constant_class:
                     # Lấy tất cả các giá trị hợp lệ từ class hằng số
-                    allowed_values = [getattr(constant_class, attr) for attr in dir(constant_class) if
-                                      not attr.startswith('__')]
+                    allowed_values = [
+                        getattr(constant_class, attr) for attr in dir(constant_class) if not attr.startswith("__")
+                    ]
                     if value not in allowed_values:
                         raise serializers.ValidationError(
                             f"Giá trị '{value}' không hợp lệ cho đặc điểm '{feature_obj.name}'. "
@@ -446,33 +468,28 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         if not code:
             return code
 
-        user = self.context['request'].user
+        user = self.context["request"].user
         try:
             promo = UserPromotion.objects.get(
-                code=code,
-                user=user,
-                status=UserPromotion.Status.AVAILABLE,
-                expiry_date__gte=timezone.now()
+                code=code, user=user, status=UserPromotion.Status.AVAILABLE, expiry_date__gte=timezone.now()
             )
         except UserPromotion.DoesNotExist:
             raise serializers.ValidationError("Mã khuyến mãi không hợp lệ hoặc đã hết hạn.")
 
-#===================AI===================
+
+# ===================AI===================
 class ListingAISerializer(ListingDetailSerializer):
     """
     Serializer chuyên dụng để tạo ra một "tài liệu" văn bản hoàn chỉnh
     về một tin đăng, phục vụ cho việc phân tích của AI (ví dụ: chatbot RAG).
     """
+
     full_address_text = serializers.SerializerMethodField()
     features_text = serializers.SerializerMethodField()
     summary_text = serializers.SerializerMethodField()
 
     class Meta(ListingDetailSerializer.Meta):
-        fields = ListingDetailSerializer.Meta.fields + [
-            'full_address_text',
-            'features_text',
-            'summary_text'
-        ]
+        fields = ListingDetailSerializer.Meta.fields + ["full_address_text", "features_text", "summary_text"]
 
     def get_full_address_text(self, obj: Listing) -> str:
         if not obj.property or not obj.property.location:
@@ -481,9 +498,9 @@ class ListingAISerializer(ListingDetailSerializer):
         loc = obj.property.location
         parts = [
             loc.street,
-            getattr(loc.ward, 'name', None),
-            getattr(loc.district, 'name', None),
-            getattr(loc.city, 'name', None)
+            getattr(loc.ward, "name", None),
+            getattr(loc.district, "name", None),
+            getattr(loc.city, "name", None),
         ]
         return ", ".join(filter(None, parts))  # Lọc ra các giá trị None và nối chuỗi
 
@@ -507,12 +524,15 @@ class ListingAISerializer(ListingDetailSerializer):
         address = self.get_full_address_text(obj)
         area = obj.property.area if obj.property else "Không rõ"
         direction = obj.property.direction.name if obj.property and obj.property.direction else "Không rõ"
-        legal_status = obj.property.legal_status.name if obj.property and obj.property.legal_status else "Chưa xác định"
+        legal_status = (
+            obj.property.legal_status.name if obj.property and obj.property.legal_status else "Chưa xác định"
+        )
         features = self.get_features_text(obj)
 
         from bs4 import BeautifulSoup
+
         soup = BeautifulSoup(obj.content, "html.parser")
-        content_text = soup.get_text(separator=' ', strip=True)
+        content_text = soup.get_text(separator=" ", strip=True)
 
         summary = (
             f"Đây là một tin đăng về bất động sản loại '{property_type}' với tiêu đề '{obj.title}'.\n"

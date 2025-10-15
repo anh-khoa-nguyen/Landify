@@ -1,8 +1,10 @@
 # tests/serializers/test_listings/test_property_serializer.py
-import pytest
-from landifys.serializers.listings import PropertySerializer
-from landifys.models import Location, Property
 from types import SimpleNamespace
+
+import pytest
+from landifys.models import Location, Property
+from landifys.serializers.listings import PropertySerializer
+
 
 @pytest.mark.django_db
 class TestPropertySerializer:
@@ -21,14 +23,14 @@ class TestPropertySerializer:
 
         # ASSERT
         assert "location" in data
-        assert data['location']['street'] == "Main St"
+        assert data["location"]["street"] == "Main St"
         # Kiểm tra xem các trường suy diễn có được serialize đúng không
         # (Giả sử LocationSerializer của bạn đã được cập nhật)
-        assert data['location']['ward_name'] == prop.location.ward.name
-        assert data['location']['district_name'] == prop.location.district.name
-        assert data['location']['city_name'] == prop.location.city.name
+        assert data["location"]["ward_name"] == prop.location.ward.name
+        assert data["location"]["district_name"] == prop.location.district.name
+        assert data["location"]["city_name"] == prop.location.city.name
 
-        assert data['owner']['get_full_name'] == prop.owner.get_full_name()
+        assert data["owner"]["get_full_name"] == prop.owner.get_full_name()
 
     def test_create_with_nested_location(self, user_factory, property_type_factory, ward_factory):
         """
@@ -44,7 +46,7 @@ class TestPropertySerializer:
 
         request = SimpleNamespace()
         request.user = user
-        context = {'request': request}
+        context = {"request": request}
 
         # Dữ liệu gửi lên giờ đây đơn giản hơn rất nhiều
         valid_data = {
@@ -54,7 +56,7 @@ class TestPropertySerializer:
                 "street": "456 Nguyễn Huệ",
                 # CHỈ CẦN CUNG CẤP ward_id
                 "ward": ward.id,
-            }
+            },
         }
 
         # ACT

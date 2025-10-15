@@ -1,21 +1,20 @@
 from django.db.models import Count
 from django.shortcuts import get_object_or_404
-
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+import apps.common.perms as perms
 from apps.common.docs import social_docs
 
 from . import models
-import apps.common.perms as perms
-
-from .serializers import CommentSerializer, PostSerializer, ReactionSerializer
 from . import services as social_services
+from .serializers import CommentSerializer, PostSerializer, ReactionSerializer
 
 # ==============================================================================
 # SOCIAL VIEWS
 # ==============================================================================
+
 
 @social_docs.post_viewset_schema
 class PostViewSet(viewsets.ModelViewSet):
@@ -70,6 +69,7 @@ class PostViewSet(viewsets.ModelViewSet):
             return Response(ReactionSerializer(reaction_obj).data, status=status.HTTP_200_OK)
         else:  # 'deleted'
             return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 @social_docs.comment_viewset_schema
 class CommentViewSet(viewsets.ModelViewSet):

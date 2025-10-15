@@ -2,6 +2,7 @@
 import pytest
 from landifys.serializers.listings import PropertyMediaSerializer
 
+
 @pytest.mark.django_db
 class TestPropertyMediaSerializer:
     """
@@ -15,8 +16,7 @@ class TestPropertyMediaSerializer:
         """
         # ARRANGE
         media = property_media_factory(
-            url="https://res.cloudinary.com/demo/image/upload/sample.jpg",
-            public_id="sample"
+            url="https://res.cloudinary.com/demo/image/upload/sample.jpg", public_id="sample"
         )
 
         # ACT
@@ -24,14 +24,11 @@ class TestPropertyMediaSerializer:
         data = serializer.data
 
         # ASSERT
-        expected_keys = {
-            "id", "property", "url", "public_id",
-            "active", "created_date", "updated_date"
-        }
+        expected_keys = {"id", "property", "url", "public_id", "active", "created_date", "updated_date"}
         assert set(data.keys()) == set(expected_keys)
-        assert data['url'] == "https://res.cloudinary.com/demo/image/upload/sample.jpg"
-        assert data['public_id'] == "sample"
-        assert data['property'] == media.property.id
+        assert data["url"] == "https://res.cloudinary.com/demo/image/upload/sample.jpg"
+        assert data["public_id"] == "sample"
+        assert data["property"] == media.property.id
 
     def test_read_only_fields_are_not_writable(self):
         """
@@ -42,8 +39,8 @@ class TestPropertyMediaSerializer:
         # Dữ liệu đầu vào chứa các trường chỉ đọc
         invalid_data = {
             "url": "http://new-url.com",
-            "property": 99, # Cố gắng gán vào trường chỉ đọc
-            "public_id": "new_public_id" # Cố gắng gán vào trường chỉ đọc
+            "property": 99,  # Cố gắng gán vào trường chỉ đọc
+            "public_id": "new_public_id",  # Cố gắng gán vào trường chỉ đọc
         }
 
         # ACT

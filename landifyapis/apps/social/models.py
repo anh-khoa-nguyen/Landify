@@ -4,6 +4,7 @@ from django.db import models
 from apps.common.models import BaseModel
 from apps.users.models import User
 
+
 class Post(BaseModel):
     """Bài đăng trên mạng xã hội của hệ thống"""
 
@@ -50,5 +51,3 @@ class Reaction(BaseModel):
         unique_together = ("user", "post")
         verbose_name = "Cảm xúc"
         verbose_name_plural = "Các Cảm xúc"
-
-

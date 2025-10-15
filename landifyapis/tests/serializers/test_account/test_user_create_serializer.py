@@ -1,6 +1,6 @@
 import pytest
-from landifys.serializers.accounts import UserCreateSerializer
 from landifys.models import User, UserProfile
+from landifys.serializers.accounts import UserCreateSerializer
 
 
 @pytest.mark.django_db
@@ -19,7 +19,7 @@ class TestUserCreateSerializer:
             "password": "strongpassword123",
             "phone_number": "0987654321",
             "first_name": "Test",
-            "last_name": "User"
+            "last_name": "User",
         }
         serializer = UserCreateSerializer(data=valid_data)
 
@@ -55,7 +55,7 @@ class TestUserCreateSerializer:
             "username": "existinguser",
             "password": "password123",
             "first_name": "Another",
-            "last_name": "User"
+            "last_name": "User",
         }
         serializer = UserCreateSerializer(data=duplicate_data)
 
@@ -71,12 +71,7 @@ class TestUserCreateSerializer:
         1. Tạo một đối tượng User.
         2. Hash mật khẩu một cách chính xác.
         """
-        valid_data = {
-            "username": "newuser",
-            "password": "plaintextpassword",
-            "first_name": "New",
-            "last_name": "User"
-        }
+        valid_data = {"username": "newuser", "password": "plaintextpassword", "first_name": "New", "last_name": "User"}
         serializer = UserCreateSerializer(data=valid_data)
         serializer.is_valid(raise_exception=True)
 

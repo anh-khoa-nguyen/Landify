@@ -5,10 +5,12 @@ from django.db import models
 
 from apps.common.models import BaseModel
 
+
 class User(AbstractUser):
     """
     Model người dùng tùy chỉnh, kế thừa từ AbstractUser của Django.
     """
+
     class Role(models.TextChoices):
         ADMIN = "admin", "Quản trị viên"
         USER = "user", "Người dùng"

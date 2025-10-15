@@ -1,22 +1,22 @@
-from rest_framework import serializers
-from vi_address.models import Ward
 from django.contrib.gis.geos import Point
+from rest_framework import serializers
 from rest_framework_gis.fields import GeometryField
+from vi_address.models import Ward
 
+from apps.common.frontend_maps import choices_maps, feature_maps
 from apps.common.mixins import DynamicFieldsMixin
-from apps.common.frontend_maps import feature_maps
 from apps.users.serializers import UserSerializer
-from .models import Location, PropertyFeature, PropertyMedia, Property, PropertyType, Direction
 
-from . import services as property_services
-from apps.common.frontend_maps import feature_maps, choices_maps
 from ..common.services import BusinessLogicError
+from . import services as property_services
+from .models import Direction, Location, Property, PropertyFeature, PropertyMedia, PropertyType
 
 # ==============================================================================
 # COMPONENT & NESTED SERIALIZERS
 # ==============================================================================
 # Các serializer này là những thành phần xây dựng nên PropertySerializer chính.
 # Chúng đại diện cho các model liên quan như Feature, Location, và Media.
+
 
 class PropertyFeatureSerializer(serializers.ModelSerializer):
     """
@@ -54,9 +54,10 @@ class PropertyFeatureSerializer(serializers.ModelSerializer):
         return self.get_frontend_info(obj).get("unit")
 
     def get_choices(self, obj: PropertyFeature) -> list | None:
-        if obj.feature_type == 'TEXT':
-             return choices_maps.get_feature_choices(obj.code)
+        if obj.feature_type == "TEXT":
+            return choices_maps.get_feature_choices(obj.code)
         return None
+
 
 class LocationSerializer(serializers.ModelSerializer):
     ward_name = serializers.CharField(source="ward.name", read_only=True)
@@ -65,9 +66,7 @@ class LocationSerializer(serializers.ModelSerializer):
 
     point = GeometryField(read_only=True)
 
-    ward = serializers.PrimaryKeyRelatedField(
-        queryset=Ward.objects.all(), write_only=True, required=True
-    )
+    ward = serializers.PrimaryKeyRelatedField(queryset=Ward.objects.all(), write_only=True, required=True)
 
     latitude = serializers.FloatField(write_only=True, required=False)
     longitude = serializers.FloatField(write_only=True, required=False)
@@ -75,38 +74,43 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         fields = [
-            "id", "street", "point", "ward", "ward_name",
-            "district_name", "city_name",
-            "latitude", "longitude",
+            "id",
+            "street",
+            "point",
+            "ward",
+            "ward_name",
+            "district_name",
+            "city_name",
+            "latitude",
+            "longitude",
         ]
+
 
 class PropertyMediaSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model PropertyMedia."""
 
     file = serializers.FileField(write_only=True, required=False)
 
-    files = serializers.ListField(
-        child=serializers.FileField(),
-        write_only=True,
-        required=False
-    )
+    files = serializers.ListField(child=serializers.FileField(), write_only=True, required=False)
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
         if instance.url:
-            rep['url'] = instance.url.url
+            rep["url"] = instance.url.url
         return rep
 
     class Meta:
         model = PropertyMedia
-        fields = ['id', 'url', 'public_id', 'property', 'file', 'files']
+        fields = ["id", "url", "public_id", "property", "file", "files"]
         read_only_fields = ["id", "url", "public_id", "property"]
+
 
 # ==============================================================================
 # CORE PROPERTY SERIALIZER
 # ==============================================================================
 # Serializer chính cho model Property, được sử dụng trong PropertyViewSet.
 # Nó lồng các component serializer ở trên để có một cấu trúc dữ liệu hoàn chỉnh.
+
 
 class PropertySerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Property, xử lý việc tạo/cập nhật Location lồng nhau."""
@@ -128,13 +132,13 @@ class PropertySerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "property_type_name",
             "direction_name",
             "legal_status_name",
-            "media"
+            "media",
         ]
 
     extra_kwargs = {
-        'property_type': {'write_only': True, 'required': True},
-        'direction': {'write_only': True, 'required': False},
-        'legal_status': {'write_only': True, 'required': False},
+        "property_type": {"write_only": True, "required": True},
+        "direction": {"write_only": True, "required": False},
+        "legal_status": {"write_only": True, "required": False},
     }
 
     def create(self, validated_data):

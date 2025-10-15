@@ -26,7 +26,7 @@ class GeoGridConverter:
     def get_cell_center(self, cell_id: str) -> tuple | None:
         """Lấy tọa độ trung tâm của một ô lưới từ ID của nó."""
         try:
-            parts = cell_id.split('_')
+            parts = cell_id.split("_")
             lat = float(parts[1])
             lng = float(parts[2])
 

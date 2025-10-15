@@ -1,22 +1,19 @@
 import pytest
 from django.utils import timezone
-from landifys.services import interactions, BusinessLogicError
-from landifys.models import User, Property, Listing, Appointment
+from landifys.models import Appointment, Listing, Property, User
+from landifys.services import BusinessLogicError, interactions
 
 
 # Sử dụng fixture của pytest để tạo dữ liệu dùng chung cho nhiều test
 @pytest.fixture
 def appointment_setup():
-    owner = User.objects.create_user(username='owner')
-    requester = User.objects.create_user(username='requester')
-    admin = User.objects.create_user(username='admin', role=User.Role.ADMIN)
+    owner = User.objects.create_user(username="owner")
+    requester = User.objects.create_user(username="requester")
+    admin = User.objects.create_user(username="admin", role=User.Role.ADMIN)
     prop = Property.objects.create(owner=owner, area=1)
-    listing = Listing.objects.create(user=owner, property=prop, title='Test')
+    listing = Listing.objects.create(user=owner, property=prop, title="Test")
     appointment = Appointment.objects.create(
-        user=requester,
-        listing=listing,
-        appointment_date=timezone.now(),
-        status=Appointment.Status.PENDING
+        user=requester, listing=listing, appointment_date=timezone.now(), status=Appointment.Status.PENDING
     )
     return owner, requester, admin, appointment
 
@@ -29,9 +26,7 @@ def test_owner_can_confirm_appointment(appointment_setup, log_step):
 
     log_step("ACT: Chủ tin đăng cập nhật trạng thái thành CONFIRMED.")
     updated_appointment = interactions.update_appointment_status(
-        appointment=appointment,
-        new_status=Appointment.Status.CONFIRMED,
-        actor=owner
+        appointment=appointment, new_status=Appointment.Status.CONFIRMED, actor=owner
     )
 
     log_step("ASSERT: Trạng thái của lịch hẹn đã được cập nhật.")
@@ -48,9 +43,7 @@ def test_requester_cannot_confirm_appointment(appointment_setup, log_step):
     log_step("ACT & ASSERT: Người đặt hẹn cố gắng xác nhận và kiểm tra lỗi.")
     with pytest.raises(BusinessLogicError, match="Chỉ chủ tin đăng hoặc quản trị viên mới có thể xác nhận lịch hẹn."):
         interactions.update_appointment_status(
-            appointment=appointment,
-            new_status=Appointment.Status.CONFIRMED,
-            actor=requester
+            appointment=appointment, new_status=Appointment.Status.CONFIRMED, actor=requester
         )
     log_step("=> PASSED!")
 
@@ -63,9 +56,7 @@ def test_any_involved_party_can_cancel(appointment_setup, log_step):
 
     log_step("--- Trường hợp 1: Người đặt hẹn hủy ---")
     interactions.update_appointment_status(
-        appointment=appointment,
-        new_status=Appointment.Status.CANCELLED,
-        actor=requester
+        appointment=appointment, new_status=Appointment.Status.CANCELLED, actor=requester
     )
     appointment.refresh_from_db()
     assert appointment.status == Appointment.Status.CANCELLED
@@ -75,9 +66,7 @@ def test_any_involved_party_can_cancel(appointment_setup, log_step):
     appointment.status = Appointment.Status.PENDING
     appointment.save()
     interactions.update_appointment_status(
-        appointment=appointment,
-        new_status=Appointment.Status.CANCELLED,
-        actor=owner
+        appointment=appointment, new_status=Appointment.Status.CANCELLED, actor=owner
     )
     appointment.refresh_from_db()
     assert appointment.status == Appointment.Status.CANCELLED

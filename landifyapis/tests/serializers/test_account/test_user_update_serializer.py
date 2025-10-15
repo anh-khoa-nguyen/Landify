@@ -2,6 +2,7 @@
 import pytest
 from landifys.serializers.accounts import UserUpdateSerializer
 
+
 @pytest.mark.django_db
 class TestUserUpdateSerializer:
     """
@@ -14,11 +15,7 @@ class TestUserUpdateSerializer:
         Kiểm tra serializer cập nhật thành công các trường cho phép (first_name, last_name, email).
         """
         user = user_factory(first_name="Old", last_name="Name", email="old@example.com")
-        update_data = {
-            "first_name": "New",
-            "last_name": "Name",
-            "email": "new@example.com"
-        }
+        update_data = {"first_name": "New", "last_name": "Name", "email": "new@example.com"}
         serializer = UserUpdateSerializer(instance=user, data=update_data, partial=True)
         serializer.is_valid(raise_exception=True)
         updated_user = serializer.save()
@@ -33,11 +30,7 @@ class TestUserUpdateSerializer:
         Kiểm tra serializer bỏ qua các trường không được phép cập nhật như 'username' hay 'role'.
         """
         user = user_factory(username="original_user", role="user")
-        malicious_data = {
-            "username": "hacked_user",
-            "role": "admin",
-            "first_name": "Updated"
-        }
+        malicious_data = {"username": "hacked_user", "role": "admin", "first_name": "Updated"}
         serializer = UserUpdateSerializer(instance=user, data=malicious_data, partial=True)
         serializer.is_valid(raise_exception=True)
         updated_user = serializer.save()

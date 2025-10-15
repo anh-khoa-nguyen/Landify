@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-import requests
 import json
 import sys
+
+import requests
 
 # =======================================================================
 # == CẤU HÌNH
@@ -54,10 +55,7 @@ def get_phone_id_token_auto():
         # ----------------------------------------------------
         # -- BƯỚC 2: Gửi sessionInfo và OTP cố định để lấy idToken
         # ----------------------------------------------------
-        verify_otp_payload = {
-            "sessionInfo": session_info,
-            "code": TEST_OTP_CODE
-        }
+        verify_otp_payload = {"sessionInfo": session_info, "code": TEST_OTP_CODE}
 
         print("\nINFO: Bước 2/2 - Đang xác thực với OTP cố định...")
         response_step2 = requests.post(VERIFY_OTP_URL, json=verify_otp_payload)
@@ -91,7 +89,7 @@ def get_phone_id_token_auto():
 
 
 # --- Điểm bắt đầu thực thi script ---
-if __name__ == '__main__':
+if __name__ == "__main__":
     if "AIzaSyDH-aaa" in FIREBASE_WEB_API_KEY:
         print("⚠️ CẢNH BÁO: Bạn đang sử dụng Web API Key mặc định.")
         print("   Vui lòng thay thế FIREBASE_WEB_API_KEY bằng key thật trong file script.")

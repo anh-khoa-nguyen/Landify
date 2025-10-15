@@ -1,7 +1,8 @@
-import pytest
 from unittest.mock import patch
-from landifys.services import verification, BusinessLogicError
+
+import pytest
 from landifys.models import User
+from landifys.services import BusinessLogicError, verification
 
 
 @pytest.mark.django_db
@@ -9,7 +10,7 @@ from landifys.models import User
 def test_request_otp_fails_if_user_has_no_phone(log_step):
     """KỊCH BẢN: Thất bại - Người dùng chưa có SĐT."""
     log_step("ARRANGE: Tạo người dùng không có số điện thoại.")
-    user = User.objects.create_user(username='testuser', phone_number=None)
+    user = User.objects.create_user(username="testuser", phone_number=None)
 
     log_step("ACT & ASSERT: Gọi service và kiểm tra exception.")
     with pytest.raises(BusinessLogicError, match="Bạn chưa cập nhật số điện thoại."):
@@ -18,9 +19,9 @@ def test_request_otp_fails_if_user_has_no_phone(log_step):
 
 
 # Mock đồng thời nhiều hàm trong các module utils
-@patch('landifys.utils.sms.send_sms')
-@patch('landifys.utils.otp.save_otp_to_cache')
-@patch('landifys.utils.otp.generate_otp')
+@patch("landifys.utils.sms.send_sms")
+@patch("landifys.utils.otp.save_otp_to_cache")
+@patch("landifys.utils.otp.generate_otp")
 @pytest.mark.django_db
 @pytest.mark.step_log
 def test_request_otp_successfully(mock_generate_otp, mock_save_otp, mock_send_sms, log_step):
@@ -30,7 +31,7 @@ def test_request_otp_successfully(mock_generate_otp, mock_save_otp, mock_send_sm
     mock_send_sms.return_value = {"message": "SMS sent successfully"}
 
     log_step("ARRANGE: Tạo người dùng có SĐT.")
-    user = User.objects.create_user(username='testuser', phone_number='+84987654321')
+    user = User.objects.create_user(username="testuser", phone_number="+84987654321")
 
     log_step("ACT: Gọi service request_phone_otp.")
     verification.request_phone_otp(user=user)

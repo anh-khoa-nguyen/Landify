@@ -1,31 +1,29 @@
+import logging
+from datetime import datetime, timedelta
 from typing import IO, Any, Dict, List
+
 import cloudinary
 import cloudinary.uploader
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
+from django.contrib.gis.measure import D
 from django.db import transaction
-from datetime import datetime, timedelta
+from django.db.models import Case, Count, Exists, F, FloatField, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from . import models, serializers
 from apps.common.services import BusinessLogicError, ProtestResolutionError
-from apps.properties import models as property_models # Import toàn bộ app properties
-from . import models as listing_models # Import app listings (đổi tên để tránh nhầm lẫn)
-from .filters import ListingFilter # <-- Đảm bảo đã import ListingFilter
-
 from apps.listings.tasks import moderation as moderation_tasks
+from apps.properties import models as property_models  # Import toàn bộ app properties
+from apps.properties.models import PropertyMedia
 from apps.users.tasks import notifications as user_notification_tasks
 
-import logging
-
-from .models import PromotionRule, UserPromotion, Listing, ListingPropertyFeatureValue
 from ..properties.models import PropertyFeature
-
-from django.db.models import F, Count, Case, When, Value, Exists, OuterRef, Subquery, Q, IntegerField, FloatField
-from django.db.models.functions import Coalesce
-from django.contrib.gis.geos import Point
-from django.contrib.gis.db.models.functions import Distance
-from django.contrib.gis.measure import D
-from .models import ListingVip
-from apps.properties.models import PropertyMedia
+from . import models  # Import app listings (đổi tên để tránh nhầm lẫn)
+from . import models as listing_models
+from . import serializers
+from .filters import ListingFilter  # <-- Đảm bảo đã import ListingFilter
+from .models import Listing, ListingPropertyFeatureValue, ListingVip, PromotionRule, UserPromotion
 
 logger = logging.getLogger(__name__)
 
@@ -35,20 +33,20 @@ logger = logging.getLogger(__name__)
 # Các hàm này không nên được gọi trực tiếp từ views, chúng chỉ hỗ trợ
 # các service function khác trong file này.
 
+
 def _update_or_create_vip_status(*, listing: listing_models.Listing, vip_package_data: dict):
     """
     Hàm helper để tạo mới hoặc gia hạn trạng thái VIP cho một tin đăng.
     Đây là nơi chứa toàn bộ logic "cộng dồn" thông minh.
     """
-    vip_type = vip_package_data.get('vip_type')
-    duration_days = vip_package_data.get('duration_days')
-    start_date = vip_package_data.get('start_date', timezone.localdate())
+    vip_type = vip_package_data.get("vip_type")
+    duration_days = vip_package_data.get("duration_days")
+    start_date = vip_package_data.get("start_date", timezone.localdate())
 
     start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
 
     vip_status, created = listing_models.ListingVip.objects.get_or_create(
-        listing=listing,
-        defaults={'vip_type': vip_type}
+        listing=listing, defaults={"vip_type": vip_type}
     )
 
     base_date = timezone.now()
@@ -63,21 +61,19 @@ def _update_or_create_vip_status(*, listing: listing_models.Listing, vip_package
     vip_status.end_date = new_end_date
     vip_status.save()
 
+
 # ==============================================================================
 # LISTING WRITE SERVICES (TÁC VỤ GHI / CHỈNH SỬA TIN ĐĂNG)
 # ==============================================================================
 # Các hàm chịu trách nhiệm tạo mới hoặc cập nhật dữ liệu của tin đăng.
 
-def create_full_listing(
-        *,
-        user: property_models.User,
-        validated_data: dict
-) -> listing_models.Listing:
+
+def create_full_listing(*, user: property_models.User, validated_data: dict) -> listing_models.Listing:
     """
     Tạo một tin đăng hoàn chỉnh, bao gồm cả việc tạo mới Property nếu cần.
     Hàm này được gọi bởi ListingCreateSerializer.
     """
-    listing_category_obj = validated_data.pop('listing_category')
+    listing_category_obj = validated_data.pop("listing_category")
     property_data_nested = validated_data.pop("property", None)
     property_id = validated_data.pop("property_id", None)
     features_data = validated_data.pop("features", None)
@@ -94,11 +90,11 @@ def create_full_listing(
 
         elif property_data_nested:
             location_data = property_data_nested.pop("location")
-            latitude = location_data.pop('latitude', None)
-            longitude = location_data.pop('longitude', None)
+            latitude = location_data.pop("latitude", None)
+            longitude = location_data.pop("longitude", None)
 
             if latitude is not None and longitude is not None:
-                location_data['point'] = Point(longitude, latitude, srid=4326)
+                location_data["point"] = Point(longitude, latitude, srid=4326)
 
             location_obj = property_models.Location.objects.create(**location_data)
 
@@ -106,7 +102,7 @@ def create_full_listing(
                 owner=user,
                 location=location_obj,
                 property_type=listing_category_obj.property_type,
-                **property_data_nested
+                **property_data_nested,
             )
             # =======================================
 
@@ -117,14 +113,11 @@ def create_full_listing(
             user=user,
             property=property_obj,
             listing_category=listing_category_obj,
-            **validated_data  # `validated_data` giờ chỉ còn các trường của Listing
+            **validated_data,  # `validated_data` giờ chỉ còn các trường của Listing
         )
 
         if vip_package_data:
-            _update_or_create_vip_status(
-                listing=listing,
-                vip_package_data=vip_package_data
-            )
+            _update_or_create_vip_status(listing=listing, vip_package_data=vip_package_data)
 
         if promotion_code:
             promo_to_use = UserPromotion.objects.get(code=promotion_code, user=user)
@@ -139,14 +132,13 @@ def create_full_listing(
                 if free_days:
                     print(f"Áp dụng {free_days} ngày đăng tin miễn phí cho listing {listing.id}")
 
-
         if features_data:
             feature_values_to_create = []
-            feature_codes = [item['feature_code'] for item in features_data]
+            feature_codes = [item["feature_code"] for item in features_data]
             features_map = {f.code: f for f in PropertyFeature.objects.filter(code__in=feature_codes)}
 
             for item in features_data:
-                feature_code = item.get('feature_code')
+                feature_code = item.get("feature_code")
                 feature_obj = features_map.get(feature_code)
                 print(feature_code, feature_obj)
 
@@ -154,9 +146,7 @@ def create_full_listing(
                     # TODO: Thêm logic validate giá trị `value` ở đây nếu cần
                     feature_values_to_create.append(
                         listing_models.ListingPropertyFeatureValue(
-                            listing=listing,
-                            feature=feature_obj,
-                            value=item.get('value')
+                            listing=listing, feature=feature_obj, value=item.get("value")
                         )
                     )
 
@@ -165,12 +155,10 @@ def create_full_listing(
 
     moderation_tasks.check_listing_for_spam.delay(listing.id)
 
-    user_notification_tasks.notify_followers_of_new_listing.delay(
-        owner_id=user.id,
-        listing_id=listing.id
-    )
+    user_notification_tasks.notify_followers_of_new_listing.delay(owner_id=user.id, listing_id=listing.id)
 
     return listing
+
 
 def update_listing_features(*, listing: models.Listing, features_data: List[Dict[str, Any]]):
     """
@@ -208,10 +196,7 @@ def update_listing_features(*, listing: models.Listing, features_data: List[Dict
                     validated_value = float(value)
                 except (ValueError, TypeError):
                     # Ghi log cảnh báo về dữ liệu không hợp lệ và bỏ qua
-                    logger.warning(
-                        "Giá trị '%s' không hợp lệ cho feature số thực '%s'. Bỏ qua.",
-                        value, feature.name
-                    )
+                    logger.warning("Giá trị '%s' không hợp lệ cho feature số thực '%s'. Bỏ qua.", value, feature.name)
                     continue
 
             elif feature.feature_type == models.PropertyFeature.FeatureType.BOOLEAN:
@@ -241,18 +226,14 @@ def update_listing_features(*, listing: models.Listing, features_data: List[Dict
                     listing=listing, feature=feature, defaults={"value": validated_value}
                 )
 
+
 # ==============================================================================
 # LISTING QUERY SERVICES (TÁC VỤ TRUY VẤN TIN ĐĂNG)
 # ==============================================================================
 # Các hàm thực hiện các truy vấn phức tạp để tìm kiếm và chấm điểm tin đăng.
 
-def find_potential_listings(
-    *,
-    latitude: float,
-    longitude: float,
-    filters: dict = None,
-    radius_km: int = 20
-):
+
+def find_potential_listings(*, latitude: float, longitude: float, filters: dict = None, radius_km: int = 20):
     """
     Tìm, LỌC (nếu có), và CHẤM ĐIỂM các tin đăng tiềm năng.
     Hàm này kết hợp cả logic lọc cứng và xếp hạng mềm.
@@ -270,9 +251,7 @@ def find_potential_listings(
 
     # 1. Bắt đầu với queryset cơ sở
     base_queryset = Listing.objects.filter(
-        active=True,
-        status=Listing.Status.AVAILABLE,
-        spam_check_status=Listing.SpamCheckStatus.CLEAN
+        active=True, status=Listing.Status.AVAILABLE, spam_check_status=Listing.SpamCheckStatus.CLEAN
     )
 
     # 2. Áp dụng các bộ lọc cứng (hard filters) từ người dùng
@@ -283,49 +262,52 @@ def find_potential_listings(
     user_location = Point(longitude, latitude, srid=4326)
 
     # 4. Xây dựng các Subquery và Annotation trên queryset ĐÃ ĐƯỢC LỌC
-    vip_priority_subquery = ListingVip.objects.filter(
-        listing=OuterRef('pk'), end_date__gte=timezone.now()
-    ).values('vip_type__sort_priority')[:1]
+    vip_priority_subquery = ListingVip.objects.filter(listing=OuterRef("pk"), end_date__gte=timezone.now()).values(
+        "vip_type__sort_priority"
+    )[:1]
 
-    image_count_subquery = PropertyMedia.objects.filter(
-        property=OuterRef('property_id')
-        # TODO: Cần có trường để phân biệt ảnh và video
-    ).values('property').annotate(c=Count('id')).values('c')
-
-    has_video_subquery = PropertyMedia.objects.filter(
-        property=OuterRef('property_id'),
-        url__iregex=r'\.(mp4|mov|avi)$'
+    image_count_subquery = (
+        PropertyMedia.objects.filter(
+            property=OuterRef("property_id")
+            # TODO: Cần có trường để phân biệt ảnh và video
+        )
+        .values("property")
+        .annotate(c=Count("id"))
+        .values("c")
     )
 
-    feature_count_subquery = ListingPropertyFeatureValue.objects.filter(
-        listing=OuterRef('pk')
-    ).values('listing').annotate(c=Count('id')).values('c')
+    has_video_subquery = PropertyMedia.objects.filter(
+        property=OuterRef("property_id"), url__iregex=r"\.(mp4|mov|avi)$"
+    )
+
+    feature_count_subquery = (
+        ListingPropertyFeatureValue.objects.filter(listing=OuterRef("pk"))
+        .values("listing")
+        .annotate(c=Count("id"))
+        .values("c")
+    )
 
     # 5. Thực hiện chấm điểm và sắp xếp
     final_queryset = (
-        filtered_queryset
-        .filter(
-            property__location__point__distance_lte=(user_location, D(km=radius_km))
-        )
+        filtered_queryset.filter(property__location__point__distance_lte=(user_location, D(km=radius_km)))
         .annotate(
-            distance_km=Distance('property__location__point', user_location) / 1000,
+            distance_km=Distance("property__location__point", user_location) / 1000,
             vip_priority=Coalesce(Subquery(vip_priority_subquery), 0, output_field=IntegerField()),
             image_count=Coalesce(Subquery(image_count_subquery), 0, output_field=IntegerField()),
             has_video=Exists(has_video_subquery),
             feature_count=Coalesce(Subquery(feature_count_subquery), 0, output_field=IntegerField()),
             has_legal_status=Case(When(property__legal_status__isnull=False, then=Value(True)), default=Value(False)),
-
             potential_score=(
-                F('distance_km') * Value(WEIGHT_DISTANCE) +
-                F('vip_priority') * Value(WEIGHT_VIP) +
-                F('feature_count') * Value(WEIGHT_FEATURES) +
-                Case(When(image_count__gt=3, then=Value(POINTS_MANY_IMAGES)), default=Value(0)) +
-                Case(When(has_video=True, then=Value(POINTS_HAS_VIDEO)), default=Value(0)) +
-                Case(When(has_legal_status=True, then=Value(POINTS_HAS_LEGAL)), default=Value(0)) +
-                Coalesce(F('scam_score'), 0.0, output_field=FloatField()) * Value(WEIGHT_SCAM_SCORE)
-            )
+                F("distance_km") * Value(WEIGHT_DISTANCE)
+                + F("vip_priority") * Value(WEIGHT_VIP)
+                + F("feature_count") * Value(WEIGHT_FEATURES)
+                + Case(When(image_count__gt=3, then=Value(POINTS_MANY_IMAGES)), default=Value(0))
+                + Case(When(has_video=True, then=Value(POINTS_HAS_VIDEO)), default=Value(0))
+                + Case(When(has_legal_status=True, then=Value(POINTS_HAS_LEGAL)), default=Value(0))
+                + Coalesce(F("scam_score"), 0.0, output_field=FloatField()) * Value(WEIGHT_SCAM_SCORE)
+            ),
         )
-        .order_by('-potential_score')
+        .order_by("-potential_score")
     )
 
     return final_queryset

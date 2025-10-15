@@ -1,10 +1,11 @@
-import pytest
 from unittest.mock import patch
-from landifys.services import verification
+
+import pytest
 from landifys.models import User
+from landifys.services import verification
 
 
-@patch('landifys.utils.otp.verify_otp_from_cache')
+@patch("landifys.utils.otp.verify_otp_from_cache")
 @pytest.mark.django_db
 @pytest.mark.step_log
 def test_verify_otp_fails_with_incorrect_code(mock_verify_from_cache, log_step):
@@ -13,7 +14,7 @@ def test_verify_otp_fails_with_incorrect_code(mock_verify_from_cache, log_step):
     mock_verify_from_cache.return_value = False
 
     log_step("ARRANGE: Tạo người dùng chưa xác thực SĐT.")
-    user = User.objects.create_user(username='testuser', phone_number='+84123456789', is_phone_verified=False)
+    user = User.objects.create_user(username="testuser", phone_number="+84123456789", is_phone_verified=False)
 
     log_step("ACT: Gọi service với một mã OTP bất kỳ.")
     is_verified = verification.verify_phone_otp(user=user, otp_code="wrong_code")
@@ -30,7 +31,7 @@ def test_verify_otp_fails_with_incorrect_code(mock_verify_from_cache, log_step):
     log_step("=> PASSED!")
 
 
-@patch('landifys.utils.otp.verify_otp_from_cache')
+@patch("landifys.utils.otp.verify_otp_from_cache")
 @pytest.mark.django_db
 @pytest.mark.step_log
 def test_verify_otp_succeeds_with_correct_code(mock_verify_from_cache, log_step):
@@ -39,7 +40,7 @@ def test_verify_otp_succeeds_with_correct_code(mock_verify_from_cache, log_step)
     mock_verify_from_cache.return_value = True
 
     log_step("ARRANGE: Tạo người dùng chưa xác thực SĐT.")
-    user = User.objects.create_user(username='testuser', phone_number='+84123456789', is_phone_verified=False)
+    user = User.objects.create_user(username="testuser", phone_number="+84123456789", is_phone_verified=False)
 
     log_step("ACT: Gọi service với một mã OTP.")
     is_verified = verification.verify_phone_otp(user=user, otp_code="correct_code")

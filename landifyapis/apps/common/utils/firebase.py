@@ -1,13 +1,15 @@
+import logging
 import os
 from typing import Any, Dict
 
 import firebase_admin
 from django.conf import settings
 from firebase_admin import auth, credentials, firestore
+
 from apps.users.models import User
 
-import logging
 logger = logging.getLogger(__name__)
+
 
 def initialize_firebase_sdk():
     """
@@ -64,9 +66,8 @@ def send_firestore_notification(
         logger.error("Lỗi khi gửi thông báo Firestore cho user ID %s: %s", user_id, e)
         return False
 
-def create_firestore_chat_session(
-    postgres_chat_id: int, user1: User, user2: User, listing_title: str
-) -> bool:
+
+def create_firestore_chat_session(postgres_chat_id: int, user1: User, user2: User, listing_title: str) -> bool:
     """
     Tạo một document mới cho cuộc trò chuyện trên Firestore.
     Document này sẽ được client lắng nghe để hiển thị trong danh sách chat.
@@ -86,14 +87,14 @@ def create_firestore_chat_session(
             "firebaseUid": user1.firebase_uid,
             "fullName": user1.get_full_name() or user1.username,
             "avatarUrl": user1.profile.avatar.url if user1.profile.avatar else None,
-            "isVerified": user1.is_identity_verified
+            "isVerified": user1.is_identity_verified,
         }
         user2_data = {
             "postgresId": user2.id,
             "firebaseUid": user2.firebase_uid,
             "fullName": user2.get_full_name() or user2.username,
             "avatarUrl": user2.profile.avatar.url if user2.profile.avatar else None,
-            "isVerified": user2.is_identity_verified
+            "isVerified": user2.is_identity_verified,
         }
         # =================================================================
 
@@ -111,7 +112,7 @@ def create_firestore_chat_session(
             "unreadCount": {
                 user1.firebase_uid: 0,
                 user2.firebase_uid: 0,
-            }
+            },
         }
 
         chat_doc_ref.set(chat_data)

@@ -23,10 +23,10 @@ def get_user_from_firebase_uid(uid):
             firebase_uid=uid,
             defaults={
                 "username": uid,  # Dùng UID làm username mặc định
-                "email": getattr(firebase_user, 'email', None),
-                "phone_number": getattr(firebase_user, 'phone_number', None),
+                "email": getattr(firebase_user, "email", None),
+                "phone_number": getattr(firebase_user, "phone_number", None),
                 "is_active": True,
-                "is_phone_verified": bool(getattr(firebase_user, 'phone_number', None)),
+                "is_phone_verified": bool(getattr(firebase_user, "phone_number", None)),
                 "role": User.Role.USER,
             },
         )
@@ -63,17 +63,17 @@ class FirebaseTokenAuthMiddleware:
             try:
                 # Xác minh ID Token bằng Firebase Admin SDK
                 decoded_token = auth.verify_id_token(token)
-                uid = decoded_token['uid']
+                uid = decoded_token["uid"]
 
                 # Lấy hoặc tạo user Django tương ứng
-                scope['user'] = await get_user_from_firebase_uid(uid)
+                scope["user"] = await get_user_from_firebase_uid(uid)
 
             except Exception as e:
                 # Nếu token không hợp lệ, gán AnonymousUser
                 print(f"Firebase token verification failed: {e}")
-                scope['user'] = AnonymousUser()
+                scope["user"] = AnonymousUser()
         else:
             # Nếu không có token, gán AnonymousUser
-            scope['user'] = AnonymousUser()
+            scope["user"] = AnonymousUser()
 
         return await self.inner(scope, receive, send)

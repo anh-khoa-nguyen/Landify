@@ -1,7 +1,7 @@
 # tests/serializers/test_listings/test_location_serializer.py
 import pytest
-from landifys.serializers.listings import LocationSerializer
 from landifys.models import Location
+from landifys.serializers.listings import LocationSerializer
 
 
 @pytest.mark.django_db
@@ -16,9 +16,7 @@ class TestLocationSerializer:
         # ARRANGE
         # Tạo một ward với district và city cụ thể để kiểm tra
         ward = ward_factory(
-            name="Phường Bến Nghé",
-            parent_code__name="Quận 1",
-            parent_code__parent_code__name="TP. Hồ Chí Minh"
+            name="Phường Bến Nghé", parent_code__name="Quận 1", parent_code__parent_code__name="TP. Hồ Chí Minh"
         )
         # Tạo location trỏ đến ward này
         location = location_factory(ward=ward)
@@ -28,16 +26,14 @@ class TestLocationSerializer:
         data = serializer.data
 
         # ASSERT
-        expected_keys = {
-            "id", "street", "point", "ward_name", "district_name", "city_name"
-        }
+        expected_keys = {"id", "street", "point", "ward_name", "district_name", "city_name"}
         # Kiểm tra xem các trường write_only (ward_id) không có trong output
         assert set(data.keys()) == expected_keys
 
         # Kiểm tra các giá trị được suy diễn
-        assert data['ward_name'] == "Phường Bến Nghé"
-        assert data['district_name'] == "Quận 1"
-        assert data['city_name'] == "TP. Hồ Chí Minh"
+        assert data["ward_name"] == "Phường Bến Nghé"
+        assert data["district_name"] == "Quận 1"
+        assert data["city_name"] == "TP. Hồ Chí Minh"
 
     def test_deserialization_with_valid_ward_id(self, ward_factory):
         """
@@ -54,7 +50,7 @@ class TestLocationSerializer:
         # ACT
         serializer = LocationSerializer(data=valid_data)
         assert serializer.is_valid(raise_exception=True) is True
-        assert serializer.validated_data['ward'] == ward
+        assert serializer.validated_data["ward"] == ward
 
     def test_deserialization_fails_without_ward_id(self):
         """

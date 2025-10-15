@@ -1,17 +1,17 @@
-from typing import IO, Any, Dict
-from datetime import date, datetime
 import time
-
-from django.core.cache import cache
-from django.db import transaction
-from django.conf import settings
+from datetime import date, datetime
+from typing import IO, Any, Dict
 
 from agora_token_builder import RtcTokenBuilder
+from django.conf import settings
+from django.core.cache import cache
+from django.db import transaction
 
+from apps.common.func import fengshui
 from apps.common.services import BusinessLogicError, EkycError
 from apps.common.utils import ekyc, otp, sms
-from apps.common.func import fengshui
 from apps.users.models import User, UserProfile
+
 
 def request_phone_otp(*, user: User):
     """Xử lý toàn bộ quy trình gửi mã OTP xác thực SĐT."""
@@ -42,7 +42,7 @@ def process_id_card_verification(*, user: User, id_card_image: IO) -> Dict[str, 
         if not ocr_data or not ocr_data.get("ID_number"):
             raise EkycError("Không thể đọc thông tin từ ảnh CCCD. Vui lòng thử lại với ảnh rõ nét hơn.")
 
-        #extracted_data = idr_response.get("data")[0]
+        # extracted_data = idr_response.get("data")[0]
 
         with transaction.atomic():
             cache.set(f"ekyc_ocr_data_{user.id}", ocr_data, timeout=86400)
@@ -50,10 +50,10 @@ def process_id_card_verification(*, user: User, id_card_image: IO) -> Dict[str, 
             user.is_id_card_verified = True
             profile = user.profile
 
-            profile.id_card_number = ocr_data.get('ID_number')
-            profile.nationality = ocr_data.get('Nationality') or "Việt Nam" # Gán mặc định nếu rỗng
-            profile.home_town = ocr_data.get('Place_of_origin')
-            profile.address = ocr_data.get('Place_of_residence')
+            profile.id_card_number = ocr_data.get("ID_number")
+            profile.nationality = ocr_data.get("Nationality") or "Việt Nam"  # Gán mặc định nếu rỗng
+            profile.home_town = ocr_data.get("Place_of_origin")
+            profile.address = ocr_data.get("Place_of_residence")
 
             # address_entities = extracted_data.get('address_entities', {})
             # if address_entities and isinstance(address_entities, dict):
@@ -65,38 +65,44 @@ def process_id_card_verification(*, user: User, id_card_image: IO) -> Dict[str, 
             #     elif district:
             #         profile.location = district
 
-            gender_str = ocr_data.get('Gender', '').lower()
-            if gender_str == 'nam':
+            gender_str = ocr_data.get("Gender", "").lower()
+            if gender_str == "nam":
                 profile.gender = User.Gender.MALE
-            elif gender_str == 'nữ':
+            elif gender_str == "nữ":
                 profile.gender = User.Gender.FEMALE
 
-            dob_str = ocr_data.get('Date_of_birth')
+            dob_str = ocr_data.get("Date_of_birth")
             if dob_str:
                 try:
                     profile.date_of_birth = datetime.strptime(dob_str, "%d/%m/%Y").date()
                 except ValueError:
                     pass
 
-            full_name = ocr_data.get('Name', '').strip()
+            full_name = ocr_data.get("Name", "").strip()
             if full_name:
-                name_parts = full_name.split(' ')
+                name_parts = full_name.split(" ")
                 if len(name_parts) > 1:
                     # Lấy từ đầu tiên làm Họ (first_name)
                     user.first_name = name_parts[0]
                     # Các từ còn lại làm Tên đệm và Tên (last_name)
-                    user.last_name = ' '.join(name_parts[1:])
+                    user.last_name = " ".join(name_parts[1:])
                 else:
                     # Nếu chỉ có một từ, coi đó là Tên (last_name) và Họ (first_name) rỗng
                     # Hoặc bạn có thể gán nó cho first_name tùy theo quy ước
-                    user.first_name = ''
+                    user.first_name = ""
                     user.last_name = full_name
 
-            user.save(update_fields=['is_id_card_verified', 'first_name', 'last_name'])
-            profile.save(update_fields=[
-                'id_card_number', 'nationality', 'home_town',
-                'address', 'gender', 'date_of_birth',
-            ])
+            user.save(update_fields=["is_id_card_verified", "first_name", "last_name"])
+            profile.save(
+                update_fields=[
+                    "id_card_number",
+                    "nationality",
+                    "home_town",
+                    "address",
+                    "gender",
+                    "date_of_birth",
+                ]
+            )
 
         return ocr_data
     except Exception as e:
@@ -127,6 +133,7 @@ def complete_ekyc_liveness_check(*, user: User, video_file: IO):
         error_message = liveness_response.get("message", "Xác thực không thành công. Vui lòng thử lại.")
         raise EkycError(error_message)
 
+
 def generate_agora_token(*, channel_name: str, uid: int) -> Dict[str, Any]:
     """Tạo token cho dịch vụ gọi video Agora."""
     if not channel_name:
@@ -149,11 +156,12 @@ def generate_agora_token(*, channel_name: str, uid: int) -> Dict[str, Any]:
             # VVV SỬA LẠI CÁCH GỌI Ở ĐÂY VVV
             # Sử dụng hằng số đã được import trực tiếp
             ROLE_PUBLISHER,
-            privilege_expired_ts
+            privilege_expired_ts,
         )
         return {"token": token, "uid": uid}
     except Exception as e:
         raise BusinessLogicError(f"Lỗi tạo token Agora: {e}")
+
 
 def get_feng_shui_analysis(*, property_direction_name: str, date_of_birth: date) -> Dict[str, Any]:
     """Thực hiện phân tích phong thủy dựa trên hướng nhà và ngày sinh."""

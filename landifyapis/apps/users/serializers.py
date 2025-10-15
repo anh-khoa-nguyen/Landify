@@ -3,24 +3,26 @@
 from rest_framework import serializers
 
 from apps.common.mixins import DynamicFieldsMixin
-from apps.users.models import User, UserProfile, Subscription
+from apps.users.models import Subscription, User, UserProfile
 
 
 class UserProfileSimpleSerializer(serializers.ModelSerializer):
     """Serializer đơn giản chỉ để lấy avatar và các thông tin cần thiết khác."""
+
     class Meta:
         model = UserProfile
-        fields = ['avatar']
+        fields = ["avatar"]
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        rep['avatar'] = instance.avatar.url if instance.avatar else None
+        rep["avatar"] = instance.avatar.url if instance.avatar else None
 
         return rep
 
 
 class UserSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer chính để hiển thị thông tin User."""
+
     profile = UserProfileSimpleSerializer(read_only=True)
 
     class Meta:
@@ -41,13 +43,16 @@ class UserSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "profile",
         ]
 
+
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ['gender', 'date_of_birth']
+        fields = ["gender", "date_of_birth"]
+
 
 class UserUpdateSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer dùng khi người dùng tự cập nhật hồ sơ."""
+
     profile = UserProfileUpdateSerializer(required=False)
 
     class Meta:
@@ -55,30 +60,29 @@ class UserUpdateSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         fields = ["first_name", "last_name", "email", "profile"]
 
     def update(self, instance, validated_data):
-        profile_data = validated_data.pop('profile', None)
+        profile_data = validated_data.pop("profile", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
         if profile_data:
-            profile, created = UserProfile.objects.get_or_create(
-                user=instance,
-                defaults=profile_data
-            )
+            profile, created = UserProfile.objects.get_or_create(user=instance, defaults=profile_data)
             if not created:
                 for attr, value in profile_data.items():
                     setattr(profile, attr, value)
                 profile.save()
         return instance
 
+
 class UserProfileDescriptionSerializer(serializers.ModelSerializer):
     """
     Serializer chuyên dụng chỉ để cập nhật trường `description` của UserProfile.
     """
+
     class Meta:
         model = UserProfile
-        fields = ['description']
+        fields = ["description"]
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -97,23 +101,26 @@ class UserCreateSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**validated_data)
         return user
 
+
 # =======================================================
 
-class UserProfileSerializer(serializers.ModelSerializer):
+
+class UserProfileSummarySerializer(serializers.ModelSerializer):
     """Serializer con để chỉ lấy dữ liệu từ UserProfile."""
+
     class Meta:
         model = UserProfile
         fields = [
-            'avatar',
-            'description',
-            'rating_score',
-            'rating_count',
-            'listing_count',
+            "avatar",
+            "description",
+            "rating_score",
+            "rating_count",
+            "listing_count",
         ]
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        rep['avatar'] = instance.avatar.url if instance.avatar else None
+        rep["avatar"] = instance.avatar.url if instance.avatar else None
         return rep
 
 
@@ -121,11 +128,12 @@ class UserProfileDetailSerializer(DynamicFieldsMixin, serializers.ModelSerialize
     """
     Serializer chuyên dụng để hiển thị trang hồ sơ công khai của một người dùng.
     """
-    profile = UserProfileSerializer(read_only=True)
+
+    profile = UserProfileSummarySerializer(read_only=True)
 
     # Thêm các trường thống kê về theo dõi
-    follower_count = serializers.IntegerField(source='follower_set.count', read_only=True)
-    following_count = serializers.IntegerField(source='following_set.count', read_only=True)
+    follower_count = serializers.IntegerField(source="follower_set.count", read_only=True)
+    following_count = serializers.IntegerField(source="following_set.count", read_only=True)
 
     class Meta:
         model = User
@@ -138,6 +146,7 @@ class UserProfileDetailSerializer(DynamicFieldsMixin, serializers.ModelSerialize
             "following_count",
         ]
 
+
 class SubscriptionSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Subscription (Theo dõi)."""
 
@@ -148,4 +157,3 @@ class SubscriptionSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         model = Subscription
         fields = "__all__"
         read_only_fields = ["follower", "following"]
-

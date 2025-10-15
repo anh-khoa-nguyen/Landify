@@ -1,10 +1,12 @@
-import jwt
-from rest_framework import authentication, exceptions
-from apps.users.models import User
-from apps.common.utils import firebase
-from firebase_admin import auth
-
 import logging
+
+import jwt
+from firebase_admin import auth
+from rest_framework import authentication, exceptions
+
+from apps.common.utils import firebase
+from apps.users.models import User
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,16 +28,13 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
 
         try:
             unverified_header = jwt.get_unverified_header(id_token)
-            if 'kid' not in unverified_header:
+            if "kid" not in unverified_header:
                 return None
         except jwt.exceptions.DecodeError:
             return None
 
         try:
-            decoded_token = auth.verify_id_token(
-                id_token,
-                clock_skew_seconds=10
-            )
+            decoded_token = auth.verify_id_token(id_token, clock_skew_seconds=10)
         except Exception as e:
             raise exceptions.AuthenticationFailed(f"Token Firebase không hợp lệ: {e}")
 
@@ -60,6 +59,7 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
             # Tạo UserProfile nếu user mới được tạo
             if created:
                 from apps.users.models import UserProfile
+
                 UserProfile.objects.create(user=user)
 
             return (user, None)

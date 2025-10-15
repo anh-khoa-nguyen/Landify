@@ -12,5 +12,6 @@ PROPERTY_TYPE_MAP = {
 
 DEFAULT_PROPERTY_TYPE_INFO = {"icon_code": "buildingUser"}
 
+
 def get_property_type_frontend_info(code: str) -> dict:
     return PROPERTY_TYPE_MAP.get(code, DEFAULT_PROPERTY_TYPE_INFO)

@@ -1,5 +1,6 @@
 # landifyapis/asgi.py
 import os
+
 import django
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
@@ -8,10 +9,11 @@ from django.core.asgi import get_asgi_application
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "landifyapis.settings")
 django.setup()
 
+import apps.interactions.routing
+
 # Bây giờ mới import các thành phần của Channels và các app Django
 # vì Django đã được khởi tạo xong
 from landifyapis.firebase_auth_middleware import FirebaseTokenAuthMiddleware
-import apps.interactions.routing
 
 # # --- PHẦN DEBUG ---
 # print("="*50)
@@ -21,18 +23,15 @@ import apps.interactions.routing
 # print("="*50)
 # # --- KẾT THÚC DEBUG ---
 
-#daphne -p 8000 landifyapis.asgi:application
+# daphne -p 8000 landifyapis.asgi:application
 # Lấy application HTTP sau khi đã setup
 django_asgi_app = get_asgi_application()
 
-application = ProtocolTypeRouter({
-    # Request HTTP thông thường sẽ được xử lý bởi Django
-    "http": django_asgi_app,
-
-    # Request WebSocket sẽ được xử lý bởi routing của Channels
-    "websocket": FirebaseTokenAuthMiddleware(
-        URLRouter(
-            apps.interactions.routing.websocket_urlpatterns
-        )
-    ),
-})
+application = ProtocolTypeRouter(
+    {
+        # Request HTTP thông thường sẽ được xử lý bởi Django
+        "http": django_asgi_app,
+        # Request WebSocket sẽ được xử lý bởi routing của Channels
+        "websocket": FirebaseTokenAuthMiddleware(URLRouter(apps.interactions.routing.websocket_urlpatterns)),
+    }
+)

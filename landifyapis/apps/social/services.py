@@ -4,9 +4,8 @@ from apps.users.models import User
 
 from .models import Post, Reaction
 
-def process_post_reaction(
-    *, user: User, post: Post, reaction_type: str
-) -> Tuple[str, Reaction | None]:
+
+def process_post_reaction(*, user: User, post: Post, reaction_type: str) -> Tuple[str, Reaction | None]:
     """
     Xử lý logic bày tỏ cảm xúc (like, love...) cho một bài đăng.
     Hàm này sẽ tạo mới, cập nhật hoặc xóa một reaction.

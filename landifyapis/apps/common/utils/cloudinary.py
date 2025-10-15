@@ -1,7 +1,9 @@
-import cloudinary.uploader
 import logging
 
+import cloudinary.uploader
+
 logger = logging.getLogger(__name__)
+
 
 def delete_cloudinary_file(public_id: str):
     """Xóa một file trên Cloudinary bằng public_id của nó."""

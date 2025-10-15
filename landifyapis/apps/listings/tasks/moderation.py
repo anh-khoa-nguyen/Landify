@@ -1,10 +1,12 @@
 # apps/listings/tasks/moderation.py
-from bs4 import BeautifulSoup
-from celery import shared_task
-import requests
 import logging
 
+import requests
+from bs4 import BeautifulSoup
+from celery import shared_task
+
 from apps.listings.models import Listing
+
 # === THAY ĐỔI IMPORT: Trỏ đến file notifications.py mới ===
 from .notifications import notify_user_of_listing_rejection
 
@@ -24,11 +26,7 @@ def check_listing_for_spam(listing_id: int):
 
         soup = BeautifulSoup(listing.content, "html.parser")
         content_text = soup.get_text()
-        payload = {
-            "listing_id": str(listing.id),
-            "title": listing.title,
-            "content": content_text
-        }
+        payload = {"listing_id": str(listing.id), "title": listing.title, "content": content_text}
 
         try:
             response = requests.post(SCAM_DETECTOR_API_URL, json=payload, timeout=60)

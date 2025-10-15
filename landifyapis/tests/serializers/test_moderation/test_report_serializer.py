@@ -1,7 +1,7 @@
 # tests/serializers/test_moderation/test_report_serializer.py
 import pytest
-from landifys.serializers.moderation import ReportSerializer
 from landifys.models import Report
+from landifys.serializers.moderation import ReportSerializer
 
 
 @pytest.mark.django_db
@@ -21,7 +21,7 @@ class TestReportSerializer:
             reporter=reporter,
             reported_item_type=Report.ItemType.LISTING,
             reported_item_id=123,
-            description="Tin đăng này có dấu hiệu lừa đảo."
+            description="Tin đăng này có dấu hiệu lừa đảo.",
         )
 
         # ACT
@@ -30,13 +30,20 @@ class TestReportSerializer:
 
         # ASSERT
         expected_keys = {
-            "id", "reporter", "description", "status", "reported_item_id",
-            "reported_item_type", "active", "created_date", "updated_date"
+            "id",
+            "reporter",
+            "description",
+            "status",
+            "reported_item_id",
+            "reported_item_type",
+            "active",
+            "created_date",
+            "updated_date",
         }
         assert set(data.keys()) == expected_keys
-        assert data['reporter']['get_full_name'] == "Good Citizen"
-        assert data['reported_item_type'] == Report.ItemType.LISTING
-        assert data['reported_item_id'] == 123
+        assert data["reporter"]["get_full_name"] == "Good Citizen"
+        assert data["reported_item_type"] == Report.ItemType.LISTING
+        assert data["reported_item_id"] == 123
 
     def test_deserialization_with_valid_data(self):
         """
@@ -47,7 +54,7 @@ class TestReportSerializer:
         valid_data = {
             "reported_item_type": "user",
             "reported_item_id": 456,
-            "description": "Người dùng này có hành vi không phù hợp."
+            "description": "Người dùng này có hành vi không phù hợp.",
         }
 
         # ACT
@@ -65,7 +72,7 @@ class TestReportSerializer:
         invalid_data = {
             "reported_item_type": "invalid_type",  # Giá trị không có trong choices
             "reported_item_id": 789,
-            "description": "Test invalid type."
+            "description": "Test invalid type.",
         }
 
         # ACT
@@ -87,7 +94,7 @@ class TestReportSerializer:
             "reported_item_id": 1,
             "description": "Some description.",
             "status": Report.Status.RESOLVED,  # Cố gắng ghi vào trường chỉ đọc
-            "reporter": 99  # Cố gắng ghi vào trường chỉ đọc
+            "reporter": 99,  # Cố gắng ghi vào trường chỉ đọc
         }
 
         # ACT

@@ -1,9 +1,9 @@
 # tests/serializers/test_social/test_post_serializer.py
 import pytest
-from rest_framework.test import APIRequestFactory
 from django.contrib.auth.models import AnonymousUser
-from landifys.serializers.social import PostSerializer
 from landifys.models import Reaction
+from landifys.serializers.social import PostSerializer
+from rest_framework.test import APIRequestFactory
 
 
 @pytest.mark.django_db
@@ -33,13 +33,20 @@ class TestPostSerializer:
 
         # ACT
         # Truyền request vào context để SerializerMethodField hoạt động
-        serializer = PostSerializer(instance=post, context={'request': mock_request})
+        serializer = PostSerializer(instance=post, context={"request": mock_request})
         data = serializer.data
 
         # ASSERT
         expected_keys = {
-            "id", "user", "title", "content", "created_date", "updated_date",
-            "comment_count", "reaction_count", "current_user_reaction"
+            "id",
+            "user",
+            "title",
+            "content",
+            "created_date",
+            "updated_date",
+            "comment_count",
+            "reaction_count",
+            "current_user_reaction",
         }
         assert set(data.keys()) == set(expected_keys)
         assert data["comment_count"] == 5
@@ -56,7 +63,7 @@ class TestPostSerializer:
         mock_request.user = AnonymousUser()
 
         # ACT
-        serializer = PostSerializer(instance=post, context={'request': mock_request})
+        serializer = PostSerializer(instance=post, context={"request": mock_request})
 
         # ASSERT
         assert serializer.data["current_user_reaction"] is None
@@ -72,13 +79,14 @@ class TestPostSerializer:
         mock_request.user = current_user
 
         # ACT
-        serializer = PostSerializer(instance=post, context={'request': mock_request})
+        serializer = PostSerializer(instance=post, context={"request": mock_request})
 
         # ASSERT
         assert serializer.data["current_user_reaction"] is None
 
-    def test_current_user_reaction_returns_correct_type(self, user_factory, post_factory, reaction_factory,
-                                                        mock_request):
+    def test_current_user_reaction_returns_correct_type(
+        self, user_factory, post_factory, reaction_factory, mock_request
+    ):
         """
         KỊCH BẢN: Thành công - Có reaction
         Kiểm tra 'current_user_reaction' trả về đúng loại cảm xúc mà người dùng đã bày tỏ.
@@ -95,7 +103,7 @@ class TestPostSerializer:
         reaction_factory(user=current_user, post=post, type=Reaction.Type.LOVE)
 
         # ACT
-        serializer = PostSerializer(instance=post, context={'request': mock_request})
+        serializer = PostSerializer(instance=post, context={"request": mock_request})
 
         # ASSERT
         assert serializer.data["current_user_reaction"] == Reaction.Type.LOVE

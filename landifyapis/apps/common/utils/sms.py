@@ -1,10 +1,11 @@
+import logging
 from typing import Any, Dict
 
 from django.conf import settings
 from twilio.rest import Client
 
-import logging
 logger = logging.getLogger(__name__)
+
 
 def send_sms(to_phone_number: str, message_body: str) -> Dict[str, Any]:
     """Gửi tin nhắn SMS qua Twilio."""

@@ -2,21 +2,19 @@ from datetime import datetime
 
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
-
 from rest_framework import parsers, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from . import services as verification_services
-
-from apps.common.docs import verification_docs, utilities_docs
 from apps.common import perms
+from apps.common.docs import utilities_docs, verification_docs
 from apps.common.services import BusinessLogicError, EkycError
-from apps.properties.models import Property
-from apps.interactions.serializers import ReviewSerializer
 from apps.interactions import services as interactions_services
+from apps.interactions.serializers import ReviewSerializer
+from apps.properties.models import Property
 from apps.verification import services as verification_services
 
+from . import services as verification_services
 
 
 class VerificationViewSet(viewsets.ViewSet):
@@ -60,7 +58,9 @@ class VerificationViewSet(viewsets.ViewSet):
             return Response({"error": "Vui lòng cung cấp ảnh CCCD."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            extracted_data = verification_services.process_id_card_verification(user=request.user, id_card_image=id_card_image)
+            extracted_data = verification_services.process_id_card_verification(
+                user=request.user, id_card_image=id_card_image
+            )
             return Response(
                 {"message": "Đọc thông tin CCCD thành công.", "data": extracted_data}, status=status.HTTP_200_OK
             )
@@ -87,10 +87,13 @@ class VerificationViewSet(viewsets.ViewSet):
         except Exception as e:
             return Response({"error": "Đã có lỗi hệ thống xảy ra."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 def get_property_or_404(pk):
     return get_object_or_404(Property, pk=pk)
 
+
 # =================== ANALYSIS & UTILITIES ==========================
+
 
 @utilities_docs.property_analysis_viewset_schema
 class PropertyAnalysisViewSet(viewsets.ViewSet):
@@ -124,6 +127,7 @@ class PropertyAnalysisViewSet(viewsets.ViewSet):
         except BusinessLogicError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+
 @utilities_docs.agora_token_viewset_schema
 class AgoraTokenViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
@@ -134,10 +138,7 @@ class AgoraTokenViewSet(viewsets.ViewSet):
         uid = request.user.id
 
         try:
-            token_data = verification_services.generate_agora_token(
-                channel_name=channel_name,
-                uid=uid
-            )
+            token_data = verification_services.generate_agora_token(channel_name=channel_name, uid=uid)
             # Token_data trả về từ service đã có dạng {"token": "...", "uid": ...}
             return Response(token_data, status=status.HTTP_200_OK)
         except BusinessLogicError as e:

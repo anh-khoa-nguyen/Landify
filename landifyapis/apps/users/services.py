@@ -6,10 +6,10 @@ import cloudinary
 import cloudinary.uploader
 from django.db import transaction
 
-from .models import User, UserProfile,Subscription
+from ..common.services import BusinessLogicError
+from .models import Subscription, User, UserProfile
 from .serializers import UserCreateSerializer
 
-from ..common.services import BusinessLogicError
 
 def create_user(serializer: UserCreateSerializer) -> User:
     """Tạo một người dùng mới và các đối tượng liên quan."""
@@ -17,6 +17,7 @@ def create_user(serializer: UserCreateSerializer) -> User:
         user = User.objects.create_user(**serializer.validated_data)
         UserProfile.objects.create(user=user)
     return user
+
 
 def change_user_password(*, user: User, old_password: str, new_password: str):
     """Thay đổi mật khẩu cho người dùng đã đăng nhập."""
@@ -36,7 +37,6 @@ def change_user_avatar(*, user: User, avatar_file: IO) -> str:
         return profile.avatar.url
     except Exception as e:
         raise BusinessLogicError(f"Upload ảnh thất bại: {e}")
-
 
 def toggle_user_follow(*, follower: User, following: User) -> str:
     """Xử lý logic theo dõi hoặc bỏ theo dõi một người dùng khác."""

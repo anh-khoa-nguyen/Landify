@@ -1,8 +1,9 @@
 # landifys/docs/moderation_docs.py
 
-from drf_spectacular.utils import extend_schema_view, extend_schema, OpenApiExample
-from apps.moderation.serializers import ReportSerializer, ProtestSerializer
-from apps.moderation.models import Protest, Report # Import model để lấy choices
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
+
+from apps.moderation.models import Protest, Report  # Import model để lấy choices
+from apps.moderation.serializers import ProtestSerializer, ReportSerializer
 
 # ==============================================================================
 # ĐỊNH NGHĨA SCHEMA CHO REPORT VIEWSET
@@ -15,12 +16,11 @@ report_viewset_schema = extend_schema_view(
         description=(
             "**Admin:** Xem tất cả các báo cáo trong hệ thống.\n"
             "**Người dùng thường:** Chỉ xem các báo cáo do chính mình tạo."
-        )
+        ),
     ),
     # Action: retrieve (GET /api/reports/{id}/)
     retrieve=extend_schema(
-        summary="Lấy chi tiết một báo cáo",
-        description="Chỉ Admin hoặc người tạo báo cáo mới có thể xem chi tiết."
+        summary="Lấy chi tiết một báo cáo", description="Chỉ Admin hoặc người tạo báo cáo mới có thể xem chi tiết."
     ),
     # Action: create (POST /api/reports/)
     create=extend_schema(
@@ -32,14 +32,14 @@ report_viewset_schema = extend_schema_view(
         ),
         examples=[
             OpenApiExample(
-                'Ví dụ báo cáo một tin đăng',
+                "Ví dụ báo cáo một tin đăng",
                 value={
                     "reported_item_type": "listing",
                     "reported_item_id": 45,
-                    "description": "Tin đăng này chứa thông tin lừa đảo."
-                }
+                    "description": "Tin đăng này chứa thông tin lừa đảo.",
+                },
             )
-        ]
+        ],
     ),
     # Các action này chỉ dành cho Admin
     update=extend_schema(summary="[Admin] Cập nhật một báo cáo"),
@@ -57,7 +57,7 @@ protest_viewset_schema = extend_schema_view(
     retrieve=extend_schema(summary="[Admin] Lấy chi tiết một kháng nghị"),
     create=extend_schema(
         summary="[Admin] Tạo một kháng nghị (thường không dùng)",
-        description="Endpoint này tồn tại do kế thừa từ ModelViewSet, nhưng luồng chính để tạo kháng nghị là từ `POST /api/listings/{public_id}/protest/`."
+        description="Endpoint này tồn tại do kế thừa từ ModelViewSet, nhưng luồng chính để tạo kháng nghị là từ `POST /api/listings/{public_id}/protest/`.",
     ),
     update=extend_schema(summary="[Admin] Cập nhật một kháng nghị"),
     partial_update=extend_schema(summary="[Admin] Cập nhật một phần kháng nghị"),
@@ -73,24 +73,21 @@ resolve_protest_schema = extend_schema(
         "- Nếu `status` là `REJECTED`, tin đăng vẫn sẽ không hoạt động."
     ),
     request={
-        'application/json': {
-            'type': 'object',
-            'properties': {
-                'status': {
-                    'type': 'string',
-                    'description': 'Trạng thái xử lý mới',
-                    'enum': [Protest.Status.RESOLVED, Protest.Status.REJECTED]
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "description": "Trạng thái xử lý mới",
+                    "enum": [Protest.Status.RESOLVED, Protest.Status.REJECTED],
                 },
-                'resolution_note': {
-                    'type': 'string',
-                    'description': 'Ghi chú của admin giải thích về quyết định.'
-                }
+                "resolution_note": {"type": "string", "description": "Ghi chú của admin giải thích về quyết định."},
             },
-            'required': ['status', 'resolution_note']
+            "required": ["status", "resolution_note"],
         }
     },
     responses={
         200: ProtestSerializer,
-        400: {'description': 'Trạng thái không hợp lệ hoặc kháng nghị đã được xử lý trước đó.'}
-    }
+        400: {"description": "Trạng thái không hợp lệ hoặc kháng nghị đã được xử lý trước đó."},
+    },
 )

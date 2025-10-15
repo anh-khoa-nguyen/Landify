@@ -1,7 +1,9 @@
 # tests/serializers/test_details/test_rental_detail_serializer.py
-import pytest
 from decimal import Decimal
+
+import pytest
 from landifys.serializers.details import RentalDetailSerializer
+
 
 @pytest.mark.django_db
 class TestRentalDetailSerializer:
@@ -23,12 +25,19 @@ class TestRentalDetailSerializer:
 
         # ASSERT
         expected_keys = {
-            "deposit_amount", "min_lease_duration", "allow_pets", "allow_smoking",
-            "max_occupants", "is_electricity_included", "is_water_included",
-            "is_internet_included", "is_management_fee_included", "available_from_date"
+            "deposit_amount",
+            "min_lease_duration",
+            "allow_pets",
+            "allow_smoking",
+            "max_occupants",
+            "is_electricity_included",
+            "is_water_included",
+            "is_internet_included",
+            "is_management_fee_included",
+            "available_from_date",
         }
         assert set(data.keys()) == expected_keys
-        assert data['deposit_amount'] == "10000000.00" # DecimalField được serialize thành string
+        assert data["deposit_amount"] == "10000000.00"  # DecimalField được serialize thành string
 
     def test_deserialization_with_valid_data(self):
         """
@@ -46,7 +55,7 @@ class TestRentalDetailSerializer:
             "is_water_included": False,
             "is_internet_included": True,
             "is_management_fee_included": False,
-            "available_from_date": "2025-12-01"
+            "available_from_date": "2025-12-01",
         }
 
         # ACT

@@ -1,7 +1,8 @@
 # tests/serializers/test_details/test_buysell_detail_serializer.py
 import pytest
-from landifys.serializers.details import BuySellDetailSerializer
 from landifys.models import BuySellDetail
+from landifys.serializers.details import BuySellDetailSerializer
+
 
 @pytest.mark.django_db
 class TestBuySellDetailSerializer:
@@ -16,10 +17,7 @@ class TestBuySellDetailSerializer:
         """
         # ARRANGE: Sử dụng trực tiếp buysell_detail_factory.
         # Factory này sẽ tự động tạo ra một Listing liên quan.
-        detail = buy_sell_detail_factory(
-            condition_status=BuySellDetail.ConditionStatus.RENOVATED,
-            is_mortgaged=True
-        )
+        detail = buy_sell_detail_factory(condition_status=BuySellDetail.ConditionStatus.RENOVATED, is_mortgaged=True)
 
         # ACT
         serializer = BuySellDetailSerializer(instance=detail)
@@ -28,8 +26,8 @@ class TestBuySellDetailSerializer:
         # ASSERT
         expected_keys = {"condition_status", "is_mortgaged"}
         assert set(data.keys()) == expected_keys
-        assert data['condition_status'] == BuySellDetail.ConditionStatus.RENOVATED
-        assert data['is_mortgaged'] is True
+        assert data["condition_status"] == BuySellDetail.ConditionStatus.RENOVATED
+        assert data["is_mortgaged"] is True
 
     def test_deserialization_with_valid_data(self):
         """
@@ -37,10 +35,7 @@ class TestBuySellDetailSerializer:
         Kiểm tra serializer chấp nhận dữ liệu hợp lệ.
         """
         # ARRANGE
-        valid_data = {
-            "condition_status": "NEW",
-            "is_mortgaged": False
-        }
+        valid_data = {"condition_status": "NEW", "is_mortgaged": False}
 
         # ACT
         serializer = BuySellDetailSerializer(data=valid_data)
@@ -49,8 +44,8 @@ class TestBuySellDetailSerializer:
         assert serializer.is_valid(raise_exception=True) is True
         # Kiểm tra dữ liệu đã được validate
         validated_data = serializer.validated_data
-        assert validated_data['condition_status'] == BuySellDetail.ConditionStatus.NEW
-        assert validated_data['is_mortgaged'] is False
+        assert validated_data["condition_status"] == BuySellDetail.ConditionStatus.NEW
+        assert validated_data["is_mortgaged"] is False
 
     def test_deserialization_with_invalid_choice(self):
         """
@@ -58,10 +53,7 @@ class TestBuySellDetailSerializer:
         Kiểm tra serializer báo lỗi khi 'condition_status' không hợp lệ.
         """
         # ARRANGE
-        invalid_data = {
-            "condition_status": "INVALID_STATUS", # Giá trị không có trong choices
-            "is_mortgaged": True
-        }
+        invalid_data = {"condition_status": "INVALID_STATUS", "is_mortgaged": True}  # Giá trị không có trong choices
 
         # ACT
         serializer = BuySellDetailSerializer(data=invalid_data)

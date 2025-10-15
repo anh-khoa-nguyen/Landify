@@ -39,10 +39,7 @@ class TestReviewSerializer:
         Kiểm tra serializer chấp nhận dữ liệu hợp lệ để tạo mới.
         """
         # ARRANGE
-        valid_data = {
-            "rating": 4,
-            "comment": "Good place."
-        }
+        valid_data = {"rating": 4, "comment": "Good place."}
 
         # ACT
         serializer = ReviewSerializer(data=valid_data)
@@ -57,10 +54,7 @@ class TestReviewSerializer:
         Kiểm tra serializer báo lỗi khi 'rating' không hợp lệ (ngoài khoảng 1-5, không phải số).
         """
         # ARRANGE
-        invalid_data = {
-            "rating": invalid_rating,
-            "comment": "Invalid rating test."
-        }
+        invalid_data = {"rating": invalid_rating, "comment": "Invalid rating test."}
 
         # ACT
         serializer = ReviewSerializer(data=invalid_data)

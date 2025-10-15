@@ -1,11 +1,11 @@
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.gis.db import models as gis_models
 from django.db import models
 from django.utils import timezone
 
-from django.contrib.gis.db import models as gis_models
 from apps.common.models import BaseModel
 from apps.properties.models import Property
-from django.contrib.contenttypes.fields import GenericForeignKey
-from django.contrib.contenttypes.models import ContentType
 from apps.users.models import User
 
 # ==============================================================================
@@ -13,6 +13,7 @@ from apps.users.models import User
 # ==============================================================================
 # Các model này đại diện cho các hành động tương tác trực tiếp của người dùng
 # với một tin đăng hoặc bất động sản.
+
 
 class Appointment(BaseModel):
     """Lịch hẹn xem nhà cho một TIN ĐĂNG cụ thể."""
@@ -35,6 +36,7 @@ class Appointment(BaseModel):
         verbose_name = "Lịch hẹn"
         verbose_name_plural = "Các Lịch hẹn"
 
+
 class Review(BaseModel):
     """Đánh giá cho một bất động sản"""
 
@@ -52,6 +54,7 @@ class Review(BaseModel):
         verbose_name = "Đánh giá"
         verbose_name_plural = "Các Đánh giá"
 
+
 class Wishlist(BaseModel):
     """Danh sách yêu thích của người dùng"""
 
@@ -65,10 +68,12 @@ class Wishlist(BaseModel):
         verbose_name = "Danh sách yêu thích"
         verbose_name_plural = "Các Danh sách yêu thích"
 
+
 # ==============================================================================
 # PROFESSIONAL INTERACTION MODELS (TƯƠNG TÁC NGHIỆP VỤ)
 # ==============================================================================
 # Model này quản lý luồng nghiệp vụ hợp tác giữa các môi giới và chủ tin đăng.
+
 
 class Cooperation(BaseModel):
     """
@@ -84,32 +89,18 @@ class Cooperation(BaseModel):
         CANCELLED = "CANCELLED", "Đã hủy"  # Trạng thái kết thúc khi một trong hai bên hủy hợp tác
 
     listing = models.ForeignKey(
-        'listings.Listing',
-        on_delete=models.CASCADE,
-        related_name="cooperations",
-        verbose_name="Tin đăng"
+        "listings.Listing", on_delete=models.CASCADE, related_name="cooperations", verbose_name="Tin đăng"
     )
     # Người yêu cầu hợp tác (môi giới)
     agent = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="sent_cooperations",
-        verbose_name="Môi giới yêu cầu"
+        User, on_delete=models.CASCADE, related_name="sent_cooperations", verbose_name="Môi giới yêu cầu"
     )
     # Chủ tin đăng (người nhận yêu cầu)
     owner = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="received_cooperations",
-        verbose_name="Chủ tin đăng"
+        User, on_delete=models.CASCADE, related_name="received_cooperations", verbose_name="Chủ tin đăng"
     )
 
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.PENDING,
-        verbose_name="Trạng thái"
-    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, verbose_name="Trạng thái")
 
     # Ghi chú cho các hành động
     rejection_reason = models.TextField(blank=True, null=True, verbose_name="Lý do từ chối")
@@ -119,35 +110,31 @@ class Cooperation(BaseModel):
         verbose_name = "Hợp tác môi giới"
         verbose_name_plural = "Các Hợp tác môi giới"
         # Đảm bảo một môi giới chỉ có thể gửi một yêu cầu cho một tin đăng
-        unique_together = ('listing', 'agent')
+        unique_together = ("listing", "agent")
 
     def __str__(self):
         return f"Yêu cầu hợp tác từ {self.agent.username} cho tin '{self.listing.title}'"
+
 
 # ==============================================================================
 # REAL-TIME COMMUNICATION MODELS (GIAO TIẾP THỜI GIAN THỰC)
 # ==============================================================================
 # Các model này tạo nên nền tảng cho hệ thống trò chuyện (chat).
 
+
 class Chat(BaseModel):
     # Định nghĩa các loại chat có thể có
     class ChatType(models.TextChoices):
-        PRIVATE = 'PRIVATE', 'Private'
-        GROUP = 'GROUP', 'Group'
+        PRIVATE = "PRIVATE", "Private"
+        GROUP = "GROUP", "Group"
 
     # Trường này sẽ cho biết đây là chat riêng hay chat nhóm
-    chat_type = models.CharField(
-        max_length=10,
-        choices=ChatType.choices,
-        default=ChatType.PRIVATE
-    )
+    chat_type = models.CharField(max_length=10, choices=ChatType.choices, default=ChatType.PRIVATE)
 
     # Quay lại dùng ManyToManyField, nó đủ linh hoạt cho cả 2 trường hợp
     # Chat riêng sẽ có 2 participants, chat nhóm sẽ có > 2
     participants = models.ManyToManyField(
-        User,
-        related_name="chats",
-        help_text="Những người tham gia cuộc trò chuyện."
+        User, related_name="chats", help_text="Những người tham gia cuộc trò chuyện."
     )
 
     # Tên của phòng chat, chỉ bắt buộc cho chat nhóm
@@ -157,16 +144,16 @@ class Chat(BaseModel):
     # vì có thể có những cuộc chat không liên quan đến tin đăng
     listing = models.ForeignKey(
         "listings.Listing",
-        on_delete=models.SET_NULL, # Dùng SET_NULL để không mất chat khi tin đăng bị xóa
+        on_delete=models.SET_NULL,  # Dùng SET_NULL để không mất chat khi tin đăng bị xóa
         related_name="chats",
         blank=True,
-        null=True
+        null=True,
     )
 
     last_message_timestamp = models.DateTimeField(
         default=timezone.now,  # Đặt giá trị mặc định là thời gian tạo chat
         db_index=True,  # Thêm index để tăng tốc độ sắp xếp
-        verbose_name="Thời gian tin nhắn cuối"
+        verbose_name="Thời gian tin nhắn cuối",
     )
 
     def __str__(self):
@@ -179,71 +166,38 @@ class Chat(BaseModel):
             return f"Private Chat: {user_names}"
         return f"Chat ID: {self.id}"
 
+
 class Message(BaseModel):
     class MessageType(models.TextChoices):
-        TEXT = 'TEXT', 'Tin nhắn văn bản'
-        IMAGE = 'IMAGE', 'Hình ảnh'
-        FILE = 'FILE', 'Tệp đính kèm'
-        SYSTEM = 'SYSTEM', 'Thông báo hệ thống'  # Ví dụ: "A đã tham gia cuộc trò chuyện"
-        LISTING_LINK = 'LISTING_LINK', 'Liên kết tin đăng'
-        INTERACTIVE_CARD = 'INTERACTIVE_CARD', 'Thẻ tương tác'
+        TEXT = "TEXT", "Tin nhắn văn bản"
+        IMAGE = "IMAGE", "Hình ảnh"
+        FILE = "FILE", "Tệp đính kèm"
+        SYSTEM = "SYSTEM", "Thông báo hệ thống"  # Ví dụ: "A đã tham gia cuộc trò chuyện"
+        LISTING_LINK = "LISTING_LINK", "Liên kết tin đăng"
+        INTERACTIVE_CARD = "INTERACTIVE_CARD", "Thẻ tương tác"
 
-    chat = models.ForeignKey(
-        Chat,
-        on_delete=models.CASCADE,
-        related_name='messages',
-        verbose_name="Cuộc trò chuyện"
-    )
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages", verbose_name="Cuộc trò chuyện")
 
-    sender = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='sent_messages',
-        verbose_name="Người gửi"
-    )
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_messages", verbose_name="Người gửi")
 
-    content = models.TextField(
-        blank=True,
-        verbose_name="Nội dung"
-    )
+    content = models.TextField(blank=True, verbose_name="Nội dung")
 
     message_type = models.CharField(
-        max_length=25,
-        choices=MessageType.choices,
-        default=MessageType.TEXT,
-        verbose_name="Loại tin nhắn"
+        max_length=25, choices=MessageType.choices, default=MessageType.TEXT, verbose_name="Loại tin nhắn"
     )
 
-    attachment_url = models.URLField(
-        max_length=512,
-        blank=True,
-        null=True,
-        verbose_name="URL tệp đính kèm"
-    )
+    attachment_url = models.URLField(max_length=512, blank=True, null=True, verbose_name="URL tệp đính kèm")
 
-    read_by = models.ManyToManyField(
-        User,
-        related_name='read_messages',
-        blank=True,
-        verbose_name="Đã đọc bởi"
-    )
+    read_by = models.ManyToManyField(User, related_name="read_messages", blank=True, verbose_name="Đã đọc bởi")
 
-    content_type = models.ForeignKey(
-        ContentType,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
 
-    object_id = models.PositiveIntegerField(
-        null=True,
-        blank=True
-    )
+    object_id = models.PositiveIntegerField(null=True, blank=True)
 
-    linked_object = GenericForeignKey('content_type', 'object_id')
+    linked_object = GenericForeignKey("content_type", "object_id")
 
     class Meta:
-        ordering = ['created_date']
+        ordering = ["created_date"]
         verbose_name = "Tin nhắn"
         verbose_name_plural = "Các Tin nhắn"
         indexes = [

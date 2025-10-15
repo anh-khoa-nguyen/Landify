@@ -1,12 +1,13 @@
-import pytest
 from unittest.mock import patch
-from django.core.files.uploadedfile import SimpleUploadedFile
+
+import pytest
 from django.core.cache import cache
-from landifys.services import verification, EkycError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from landifys.models import User
+from landifys.services import EkycError, verification
 
 
-@patch('landifys.utils.ekyc.call_fpt_idr_api')
+@patch("landifys.utils.ekyc.call_fpt_idr_api")
 @pytest.mark.django_db
 @pytest.mark.step_log
 def test_process_id_card_fails_on_api_error(mock_fpt_api, log_step):
@@ -15,7 +16,7 @@ def test_process_id_card_fails_on_api_error(mock_fpt_api, log_step):
     mock_fpt_api.return_value = {"errorCode": 1, "errorMessage": "Ảnh không hợp lệ"}
 
     log_step("ARRANGE: Tạo người dùng và file ảnh giả.")
-    user = User.objects.create_user(username='testuser')
+    user = User.objects.create_user(username="testuser")
     fake_image = SimpleUploadedFile("id.jpg", b"content", content_type="image/jpeg")
 
     log_step("ACT & ASSERT: Gọi service và kiểm tra exception.")
@@ -24,7 +25,7 @@ def test_process_id_card_fails_on_api_error(mock_fpt_api, log_step):
     log_step("=> PASSED!")
 
 
-@patch('django.core.cache.cache.set')
+@patch("django.core.cache.cache.set")
 # @patch('landifys.utils.ekyc.call_fpt_idr_api')
 @pytest.mark.django_db
 @pytest.mark.step_log
@@ -35,7 +36,7 @@ def test_process_id_card_succeeds(mock_fpt_api, mock_cache_set, log_step):
     mock_fpt_api.return_value = {"errorCode": 0, "data": [extracted_data]}
 
     log_step("ARRANGE: Tạo người dùng và file ảnh giả.")
-    user = User.objects.create_user(username='testuser', is_id_card_verified=False)
+    user = User.objects.create_user(username="testuser", is_id_card_verified=False)
     fake_image_content = b"image_content_bytes"
     fake_image = SimpleUploadedFile("id.jpg", fake_image_content, content_type="image/jpeg")
 

@@ -14,18 +14,15 @@ PROPERTY_FEATURE_MAP = {
     "NUM_FLOORS": {"icon_code": "layerGroup"},
     "NUM_BEDROOMS": {"icon_code": "bed"},
     "NUM_BATHROOMS": {"icon_code": "bath"},
-
     # === Nội thất (INTERIOR) ===
     "INTERIOR_STATUS": {"icon_code": "couch"},
     "HAS_AC": {"icon_code": "snowflake"},
     "HAS_HEATER": {"icon_code": "temperatureHigh"},
-
     # === Tiện nghi (AMENITY) ===
     "HAS_CAR_PARKING": {"icon_code": "squareParking"},
     "HAS_GARDEN": {"icon_code": "tree"},
     "HAS_POOL": {"icon_code": "waterLadder"},
     "HAS_GYM": {"icon_code": "dumbbell"},
-
     # === Tiện ích lân cận (NEARBY) ===
     "NEAR_SCHOOL": {"icon_code": "school"},
     "NEAR_HOSPITAL": {"icon_code": "hospital"},
@@ -35,10 +32,7 @@ PROPERTY_FEATURE_MAP = {
 }
 
 # Giá trị mặc định nếu một feature không được định nghĩa trong map
-DEFAULT_FEATURE_INFO = {
-    "icon_code": "circleInfo",
-    "unit": None
-}
+DEFAULT_FEATURE_INFO = {"icon_code": "circleInfo", "unit": None}
 
 
 def get_feature_frontend_info(feature_code: str) -> dict:

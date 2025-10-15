@@ -1,19 +1,28 @@
 from django.contrib import admin
+from django.db.models import Count
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
-from django.db.models import Count
+
+from apps.properties.models import PropertyFeature  # <-- THÊM DÒNG NÀY
 
 from .models import (
-    Listing, ListingPropertyFeatureValue, ListingType, UnitPrice,
-    VipType, ListingVip, ListingCategory, PromotionRule, UserPromotion
+    Listing,
+    ListingCategory,
+    ListingPropertyFeatureValue,
+    ListingType,
+    ListingVip,
+    PromotionRule,
+    UnitPrice,
+    UserPromotion,
+    VipType,
 )
-from apps.properties.models import PropertyFeature # <-- THÊM DÒNG NÀY
 
 # ==============================================================================
 # CORE LISTING ADMIN
 # ==============================================================================
 # Cấu hình trang quản trị cho model Listing chính và các Inline liên quan.
+
 
 # Ghi chú: Hiển thị form để chỉnh sửa các đặc điểm (features) ngay trên trang Listing.
 class ListingPropertyFeatureValueInline(admin.TabularInline):
@@ -21,23 +30,22 @@ class ListingPropertyFeatureValueInline(admin.TabularInline):
     extra = 1
     readonly_fields = ("display_value",)
     fields = ("feature", "value", "display_value")
-    #raw_id_fields = ('feature',)
+    # raw_id_fields = ('feature',)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "feature":
-            parent_listing_id = request.resolver_match.kwargs.get('object_id')
+            parent_listing_id = request.resolver_match.kwargs.get("object_id")
             if parent_listing_id:
                 try:
                     listing = Listing.objects.get(pk=parent_listing_id)
 
                     # Tìm ListingCategory dựa trên listing_type và property_type của tin đăng
                     # Dùng select_related để tối ưu
-                    category = ListingCategory.objects.select_related(
-                        'listing_type', 'property_type'
-                    ).filter(
-                        listing_type=listing.listing_type,
-                        property_type=listing.property.property_type
-                    ).first()
+                    category = (
+                        ListingCategory.objects.select_related("listing_type", "property_type")
+                        .filter(listing_type=listing.listing_type, property_type=listing.property.property_type)
+                        .first()
+                    )
 
                     if category:
                         # Lấy danh sách các feature được phép từ trường ManyToMany
@@ -58,15 +66,17 @@ class ListingPropertyFeatureValueInline(admin.TabularInline):
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+
 # Ghi chú: Hiển thị form để quản lý trạng thái VIP ngay trên trang Listing.
 class ListingVipInline(admin.StackedInline):
     model = ListingVip
     can_delete = False
-    verbose_name_plural = 'Trạng thái VIP'
+    verbose_name_plural = "Trạng thái VIP"
     # Các trường có thể chỉnh sửa
-    fields = ('vip_type', 'end_date')
+    fields = ("vip_type", "end_date")
     # Hiển thị các trường chỉ đọc để admin tham khảo
-    readonly_fields = ('is_active',)
+    readonly_fields = ("is_active",)
+
 
 # Ghi chú: Tùy chỉnh giao diện quản trị chính cho model Listing.
 @admin.register(Listing)
@@ -80,7 +90,7 @@ class ListingAdmin(admin.ModelAdmin):
         "spam_check_status",
         "scam_score",
         "created_date",
-        "active"
+        "active",
     )
     list_filter = (
         "active",
@@ -97,27 +107,19 @@ class ListingAdmin(admin.ModelAdmin):
         "listing_category__listing_type__name",
         "listing_category__property_type__name",
     )
-    readonly_fields = (
-        "created_date",
-        "updated_date",
-        "scam_score",
-        "scam_detector_version"
-    )
+    readonly_fields = ("created_date", "updated_date", "scam_score", "scam_detector_version")
     raw_id_fields = ("user", "property")
-    inlines = [
-        ListingPropertyFeatureValueInline,
-        ListingVipInline
-    ]
+    inlines = [ListingPropertyFeatureValueInline, ListingVipInline]
 
-    list_select_related = ('user', 'property', 'listing_category')
+    list_select_related = ("user", "property", "listing_category")
 
-    actions = ['make_active', 'make_inactive', 'mark_as_clean']
+    actions = ["make_active", "make_inactive", "mark_as_clean"]
 
-    @admin.action(description=_('Kích hoạt các tin đăng đã chọn'))
+    @admin.action(description=_("Kích hoạt các tin đăng đã chọn"))
     def make_active(self, request, queryset):
         queryset.update(active=True)
 
-    @admin.action(description=_('Vô hiệu hóa các tin đăng đã chọn'))
+    @admin.action(description=_("Vô hiệu hóa các tin đăng đã chọn"))
     def make_inactive(self, request, queryset):
         queryset.update(active=False)
 
@@ -126,19 +128,20 @@ class ListingAdmin(admin.ModelAdmin):
         queryset.update(spam_check_status=Listing.SpamCheckStatus.CLEAN)
 
     # === Các hàm tạo link điều hướng ===
-    @admin.display(description="Người đăng", ordering='user')
+    @admin.display(description="Người đăng", ordering="user")
     def user_link(self, obj):
         if obj.user:
             url = reverse("admin:users_user_change", args=[obj.user.id])
             return format_html('<a href="{}">{}</a>', url, obj.user.username)
         return "-"
 
-    @admin.display(description="Bất động sản", ordering='property')
+    @admin.display(description="Bất động sản", ordering="property")
     def property_link(self, obj):
         if obj.property:
             url = reverse("admin:properties_property_change", args=[obj.property.id])
             return format_html('<a href="{}">ID: {}</a>', url, obj.property.id)
         return "-"
+
 
 # ==============================================================================
 # SUPPORTING MODEL ADMINS
@@ -146,24 +149,26 @@ class ListingAdmin(admin.ModelAdmin):
 # Cấu hình trang quản trị cho các model phụ, đóng vai trò là các bảng
 # cài đặt hoặc tùy chọn cho Listing.
 
+
 @admin.register(ListingType)
 class ListingTypeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'active')
-    filter_horizontal = ('applicable_unit_prices',)
+    list_display = ("name", "code", "active")
+    filter_horizontal = ("applicable_unit_prices",)
+
 
 @admin.register(ListingCategory)
 class ListingCategoryAdmin(admin.ModelAdmin):
-    list_display = ('display_name', 'listing_type', 'property_type', 'feature_count')
-    list_filter = ('listing_type', 'property_type')
-    search_fields = ('listing_type__name', 'property_type__name')
-    list_select_related = ('listing_type', 'property_type')
+    list_display = ("display_name", "listing_type", "property_type", "feature_count")
+    list_filter = ("listing_type", "property_type")
+    search_fields = ("listing_type__name", "property_type__name")
+    list_select_related = ("listing_type", "property_type")
 
     # Sử dụng widget filter_horizontal cho trường ManyToMany
-    filter_horizontal = ('applicable_features',)
+    filter_horizontal = ("applicable_features",)
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        queryset = queryset.annotate(_feature_count=Count('applicable_features'))
+        queryset = queryset.annotate(_feature_count=Count("applicable_features"))
         return queryset
 
     @admin.display(description="Tên danh mục")
@@ -171,7 +176,7 @@ class ListingCategoryAdmin(admin.ModelAdmin):
         # Sử dụng property có sẵn trong model
         return obj.display_name
 
-    @admin.display(description="Số features", ordering='_feature_count')
+    @admin.display(description="Số features", ordering="_feature_count")
     def feature_count(self, obj):
         return obj._feature_count
 
@@ -179,45 +184,47 @@ class ListingCategoryAdmin(admin.ModelAdmin):
 # Ghi chú: Quản lý các quy tắc/chương trình khuyến mãi gốc.
 @admin.register(PromotionRule)
 class PromotionRuleAdmin(admin.ModelAdmin):
-    list_display = ('title', 'promo_type', 'trigger_event', 'active')
-    list_filter = ('promo_type', 'trigger_event', 'active')
-    search_fields = ('title', 'description')
+    list_display = ("title", "promo_type", "trigger_event", "active")
+    list_filter = ("promo_type", "trigger_event", "active")
+    search_fields = ("title", "description")
 
     # Dùng filter_horizontal cho việc chọn các gói VIP được áp dụng
-    filter_horizontal = ('applicable_vip_types',)
+    filter_horizontal = ("applicable_vip_types",)
 
     # === SỬA LỖI VÀ CẢI TIẾN BẰNG FIELDSETS ===
     fieldsets = (
-        ('Thông tin chung', {
-            'fields': ('title', 'description', 'active')
-        }),
-        ('Loại hình và Kích hoạt', {
-            'fields': ('promo_type', 'trigger_event')
-        }),
-        ('Giá trị Khuyến mãi', {
-            'description': "Điền vào một trong các trường dưới đây, tùy thuộc vào 'Loại hình' đã chọn ở trên.",
-            'fields': ('free_listing_days', 'discount_percentage', 'applicable_vip_types')
-        }),
-        ('Thời hạn Hiệu lực', {
-            'description': "Nếu kích hoạt 'Khi đăng ký tài khoản', hãy điền 'Thời hạn hiệu lực'.",
-            'fields': ('validity_duration',)
-        }),
+        ("Thông tin chung", {"fields": ("title", "description", "active")}),
+        ("Loại hình và Kích hoạt", {"fields": ("promo_type", "trigger_event")}),
+        (
+            "Giá trị Khuyến mãi",
+            {
+                "description": "Điền vào một trong các trường dưới đây, tùy thuộc vào 'Loại hình' đã chọn ở trên.",
+                "fields": ("free_listing_days", "discount_percentage", "applicable_vip_types"),
+            },
+        ),
+        (
+            "Thời hạn Hiệu lực",
+            {
+                "description": "Nếu kích hoạt 'Khi đăng ký tài khoản', hãy điền 'Thời hạn hiệu lực'.",
+                "fields": ("validity_duration",),
+            },
+        ),
     )
 
 
 # Ghi chú: Quản lý các mã khuyến mãi đã được cấp cho từng người dùng.
 @admin.register(UserPromotion)
 class UserPromotionAdmin(admin.ModelAdmin):
-    list_display = ('code', 'user_link', 'rule_link', 'status', 'expiry_date', 'used_on_listing_link')
-    list_filter = ('status', 'rule__promo_type')
-    search_fields = ('code', 'user__username', 'rule__title')
-    raw_id_fields = ('user', 'rule', 'used_on_listing')
-    list_select_related = ('user', 'rule', 'used_on_listing')
+    list_display = ("code", "user_link", "rule_link", "status", "expiry_date", "used_on_listing_link")
+    list_filter = ("status", "rule__promo_type")
+    search_fields = ("code", "user__username", "rule__title")
+    raw_id_fields = ("user", "rule", "used_on_listing")
+    list_select_related = ("user", "rule", "used_on_listing")
 
     # Cho phép admin tạo mã KM thủ công
-    fields = ('user', 'rule', 'code', 'expiry_date', 'status')
+    fields = ("user", "rule", "code", "expiry_date", "status")
     # Các trường này chỉ để xem, không cho sửa
-    readonly_fields = ('used_at', 'used_on_listing_link')
+    readonly_fields = ("used_at", "used_on_listing_link")
 
     # Ghi đè để thêm link vào trường used_on_listing
     def get_fieldsets(self, request, obj=None):
@@ -226,32 +233,37 @@ class UserPromotionAdmin(admin.ModelAdmin):
             # Nếu đã sử dụng, hiển thị thêm thông tin chỉ đọc
             fieldsets = list(fieldsets)
             fieldsets.append(
-                ('Thông tin sử dụng (Chỉ đọc)', {
-                    'fields': ('used_at', 'used_on_listing_link'),
-                })
+                (
+                    "Thông tin sử dụng (Chỉ đọc)",
+                    {
+                        "fields": ("used_at", "used_on_listing_link"),
+                    },
+                )
             )
         return fieldsets
 
-    @admin.display(description="Người dùng", ordering='user')
+    @admin.display(description="Người dùng", ordering="user")
     def user_link(self, obj):
         url = reverse("admin:users_user_change", args=[obj.user.id])
         return format_html('<a href="{}">{}</a>', url, obj.user.username)
 
-    @admin.display(description="Quy tắc KM", ordering='rule')
+    @admin.display(description="Quy tắc KM", ordering="rule")
     def rule_link(self, obj):
         url = reverse("admin:listings_promotionrule_change", args=[obj.rule.id])
         return format_html('<a href="{}">{}</a>', url, obj.rule.title)
 
-    @admin.display(description="Sử dụng trên tin", ordering='used_on_listing')
+    @admin.display(description="Sử dụng trên tin", ordering="used_on_listing")
     def used_on_listing_link(self, obj):
         if obj.used_on_listing:
             url = reverse("admin:listings_listing_change", args=[obj.used_on_listing.id])
             return format_html('<a href="{}">{}</a>', url, obj.used_on_listing.title)
         return "-"
 
+
 @admin.register(VipType)
 class VipTypeAdmin(admin.ModelAdmin):
     list_display = ("name", "code", "price_per_day", "sort_priority", "active")
     search_fields = ("name", "code")
+
 
 admin.site.register(UnitPrice)

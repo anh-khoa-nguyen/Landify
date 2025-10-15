@@ -15,19 +15,24 @@ class TestUserSerializer:
         Kiểm tra JSON đầu ra chứa đúng và đủ các trường đã định nghĩa.
         """
         user = user_factory(
-            username="testuser",
-            first_name="Test",
-            last_name="User",
-            email="test@example.com",
-            role="admin"
+            username="testuser", first_name="Test", last_name="User", email="test@example.com", role="admin"
         )
         serializer = UserSerializer(instance=user)
         data = serializer.data
 
         expected_keys = [
-            "id", "username", "first_name", "last_name", "get_full_name",
-            "email", "role", "phone_number", "is_phone_verified",
-            "is_id_card_verified", "is_identity_verified", "date_joined"
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "get_full_name",
+            "email",
+            "role",
+            "phone_number",
+            "is_phone_verified",
+            "is_id_card_verified",
+            "is_identity_verified",
+            "date_joined",
         ]
 
         assert set(data.keys()) == set(expected_keys)

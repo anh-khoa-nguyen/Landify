@@ -1,10 +1,11 @@
 from rest_framework import serializers
 
 from apps.common.mixins import DynamicFieldsMixin
-
-from .models import Comment, Post, Reaction
 from apps.users.models import Subscription
 from apps.users.serializers import UserSerializer
+
+from .models import Comment, Post, Reaction
+
 
 class PostSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer chính cho model Post, bao gồm các thông tin tổng hợp."""
@@ -42,6 +43,7 @@ class PostSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             return reaction.type if reaction else None
         return None
 
+
 class CommentSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Comment."""
 
@@ -52,10 +54,10 @@ class CommentSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ["user", "post"]
 
+
 class ReactionSerializer(serializers.ModelSerializer):
     """Serializer đơn giản để validate loại cảm xúc."""
 
     class Meta:
         model = Reaction
         fields = ["type"]
-

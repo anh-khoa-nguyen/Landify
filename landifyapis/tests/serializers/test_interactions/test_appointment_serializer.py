@@ -1,8 +1,10 @@
 # tests/serializers/test_interactions/test_appointment_serializer.py
-import pytest
 from datetime import timedelta
+
+import pytest
 from django.utils import timezone
 from landifys.serializers.interactions import AppointmentSerializer
+
 
 @pytest.mark.django_db
 class TestAppointmentSerializer:
@@ -25,8 +27,15 @@ class TestAppointmentSerializer:
 
         # ASSERT
         expected_keys = {
-            "id", "user", "listing", "appointment_date", "note",
-            "status", "active", "created_date", "updated_date"
+            "id",
+            "user",
+            "listing",
+            "appointment_date",
+            "note",
+            "status",
+            "active",
+            "created_date",
+            "updated_date",
         }
         assert set(data.keys()) == expected_keys
         assert data["user"]["id"] == user.id
@@ -44,11 +53,7 @@ class TestAppointmentSerializer:
         # ARRANGE
         listing = listing_factory()
         future_date = timezone.now() + timedelta(days=2)
-        valid_data = {
-            "listing_id": listing.id,
-            "appointment_date": future_date.isoformat(),
-            "note": "A valid note."
-        }
+        valid_data = {"listing_id": listing.id, "appointment_date": future_date.isoformat(), "note": "A valid note."}
 
         # ACT
         serializer = AppointmentSerializer(data=valid_data)
@@ -65,8 +70,8 @@ class TestAppointmentSerializer:
         listing = listing_factory()
         invalid_data = {
             "listing_id": listing.id,
-            "appointment_date": "25-12-2025 10:00", # Sai định dạng
-            "note": "Invalid date format."
+            "appointment_date": "25-12-2025 10:00",  # Sai định dạng
+            "note": "Invalid date format.",
         }
 
         # ACT

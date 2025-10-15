@@ -1,6 +1,7 @@
+from bulk_update_or_create.query import BulkUpdateOrCreateQuerySet
 from django.db import models
 from vi_address.models import Ward
-from bulk_update_or_create.query import BulkUpdateOrCreateQuerySet
+
 
 class BaseModel(models.Model):
     """
@@ -18,13 +19,19 @@ class BaseModel(models.Model):
         abstract = True
         ordering = ["-id"]
 
+
 class SiteStatistic(models.Model):
     """
     Model để lưu trữ các số liệu thống kê của toàn trang web,
     được tính toán định kỳ bởi các tác vụ nền.
     """
-    key = models.CharField(max_length=100, unique=True, primary_key=True
-                           , help_text="Khóa định danh cho số liệu, ví dụ: 'total_active_listings'")
+
+    key = models.CharField(
+        max_length=100,
+        unique=True,
+        primary_key=True,
+        help_text="Khóa định danh cho số liệu, ví dụ: 'total_active_listings'",
+    )
     value = models.PositiveIntegerField(default=0, help_text="Giá trị của số liệu")
     last_updated = models.DateTimeField(auto_now=True, help_text="Lần cuối cập nhật")
 
@@ -41,13 +48,10 @@ class GeoGridStatistic(models.Model):
     Model để lưu trữ thống kê giá BĐS đã được tính toán trước cho mỗi ô lưới địa lý.
     Dữ liệu được lưu trong JSONField để có thể chứa thống kê cho nhiều ListingCategory.
     """
+
     objects = BulkUpdateOrCreateQuerySet.as_manager()
 
-    grid_cell_id = models.CharField(
-        max_length=100,
-        primary_key=True,
-        verbose_name="Grid Cell ID"
-    )
+    grid_cell_id = models.CharField(max_length=100, primary_key=True, verbose_name="Grid Cell ID")
 
     # Tọa độ trung tâm của ô lưới (để tham khảo)
     center_lat = models.FloatField(null=True)
@@ -69,11 +73,7 @@ class GeoGridStatistic(models.Model):
     #     "property_type_code": "APARTMENT"
     #   }
     # }
-    stats_by_category = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name="Thống kê theo từng Danh mục"
-    )
+    stats_by_category = models.JSONField(default=dict, blank=True, verbose_name="Thống kê theo từng Danh mục")
 
     last_updated = models.DateTimeField(auto_now=True, verbose_name="Lần cuối cập nhật")
 

@@ -1,7 +1,7 @@
 import pytest
-from landifys.services import accounts
 from landifys.models import User, UserProfile
 from landifys.serializers.accounts import UserCreateSerializer
+from landifys.services import accounts
 
 
 @pytest.mark.django_db
@@ -15,12 +15,7 @@ def test_create_user_successfully(log_step):
     3. Tự động tạo một đối tượng UserProfile liên kết.
     """
     log_step("ARRANGE: Chuẩn bị dữ liệu hợp lệ cho việc đăng ký.")
-    user_data = {
-        "username": "newuser",
-        "password": "password123",
-        "first_name": "New",
-        "last_name": "User"
-    }
+    user_data = {"username": "newuser", "password": "password123", "first_name": "New", "last_name": "User"}
 
     log_step("ARRANGE: Tạo một instance của serializer và validate dữ liệu.")
     serializer = UserCreateSerializer(data=user_data)

@@ -1,7 +1,7 @@
 # tests/serializers/test_listings/test_listing_create_serializer.py
 import pytest
-from rest_framework.exceptions import ValidationError
 from landifys.serializers.listings import ListingCreateSerializer
+from rest_framework.exceptions import ValidationError
 
 
 @pytest.mark.django_db
@@ -12,10 +12,7 @@ class TestListingCreateSerializer:
         KỊCH BẢN: Thất bại - Validation
         Kiểm tra serializer báo lỗi khi không cung cấp 'property' hoặc 'property_id'.
         """
-        invalid_data = {
-            "title": "Test Listing",
-            "content": "Some content."
-        }
+        invalid_data = {"title": "Test Listing", "content": "Some content."}
         serializer = ListingCreateSerializer(data=invalid_data)
 
         with pytest.raises(ValidationError) as excinfo:
@@ -37,19 +34,14 @@ class TestListingCreateSerializer:
             "listing_type": l_type.id,
             "title": "Test Listing",
             "content": "Some content here.",
-
             "property_id": prop.id,  # Tham số thứ nhất
-
             # Tham số thứ hai: Cung cấp một dictionary 'property' hợp lệ
             # để nó vượt qua vòng validation của PropertySerializer
             "property": {
                 "property_type_id": prop.property_type.id,
                 "area": 150.0,
-                "location": {
-                    "street": "789 Tôn Đức Thắng",
-                    "ward": ward.id
-                }
-            }
+                "location": {"street": "789 Tôn Đức Thắng", "ward": ward.id},
+            },
         }
 
         # ACT
@@ -79,7 +71,7 @@ class TestListingCreateSerializer:
             # -----------------------------------
             "property_id": prop.id,
             "buysell_detail": {"is_mortgaged": False},
-            "rental_detail": {"deposit_amount": 5000000}
+            "rental_detail": {"deposit_amount": 5000000},
         }
         serializer = ListingCreateSerializer(data=invalid_data)
 
@@ -101,7 +93,7 @@ class TestListingCreateSerializer:
             "listing_type": l_type.id,
             # -----------------------------------
             "property_id": prop.id,
-            "buysell_detail": {"is_mortgaged": True}
+            "buysell_detail": {"is_mortgaged": True},
         }
         serializer = ListingCreateSerializer(data=valid_data)
         assert serializer.is_valid(raise_exception=True) is True

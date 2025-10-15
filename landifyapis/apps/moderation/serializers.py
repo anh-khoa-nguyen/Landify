@@ -1,42 +1,41 @@
-from rest_framework import serializers
 from django.contrib.contenttypes.models import ContentType
+from rest_framework import serializers
 
 from apps.common.mixins import DynamicFieldsMixin
-from apps.users.serializers import UserSerializer
 from apps.common.utils import hashids
+from apps.users.serializers import UserSerializer
 
-from .models import Protest, Report, ModerationAction
+from .models import ModerationAction, Protest, Report
 
 # ==============================================================================
 # MODERATION SERIALIZERS
 # ==============================================================================
 
+
 class ReportSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Report (Báo cáo vi phạm)."""
 
     reporter = UserSerializer(read_only=True, fields=("id", "get_full_name"))
-    reported_item_type_name = serializers.ChoiceField(
-        choices=Report.ItemType.choices, write_only=True
-    )
+    reported_item_type_name = serializers.ChoiceField(choices=Report.ItemType.choices, write_only=True)
     reported_item_id = serializers.CharField(write_only=True)
 
     class Meta:
         model = Report
         fields = [
-            'id',
-            'reporter',
-            'description',
-            'status',
-            'reported_item_type_name',
-            'reported_item_id',
-            'created_date',
-            'updated_date'
+            "id",
+            "reporter",
+            "description",
+            "status",
+            "reported_item_type_name",
+            "reported_item_id",
+            "created_date",
+            "updated_date",
         ]
         read_only_fields = ["reporter", "status"]
 
     def validate(self, data):
-        type_name = data.get('reported_item_type_name')
-        item_id_str = data.get('reported_item_id')
+        type_name = data.get("reported_item_type_name")
+        item_id_str = data.get("reported_item_id")
         real_id = None
         try:
             if type_name == Report.ItemType.LISTING:
@@ -57,8 +56,8 @@ class ReportSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
                     {"reported_item_id": f"Đối tượng '{type_name}' với ID '{item_id_str}' không tồn tại."}
                 )
 
-            data['reported_item_type'] = content_type
-            data['reported_item_id'] = real_id
+            data["reported_item_type"] = content_type
+            data["reported_item_id"] = real_id
 
         except ContentType.DoesNotExist:
             raise serializers.ValidationError(
@@ -66,6 +65,7 @@ class ReportSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             )
 
         return data
+
 
 class ProtestSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Protest (Kháng nghị)."""

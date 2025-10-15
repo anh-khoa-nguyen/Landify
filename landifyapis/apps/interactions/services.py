@@ -1,32 +1,28 @@
 from datetime import datetime
-
-from django.db import transaction
-from django.db.models import Count, Sum
-from django.utils import timezone
 from typing import Tuple
-
-from apps.users.models import User
-from apps.listings.models import Listing, Property
-from .models import Appointment, Review, Cooperation, Chat, Wishlist
-from .serializers import ReviewSerializer
-
-from apps.common.tasks import notifications
-from apps.common.services import BusinessLogicError
 
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import Distance
+from django.db import transaction
+from django.db.models import Count, Sum
+from django.utils import timezone
+
+from apps.common.services import BusinessLogicError
+from apps.common.tasks import notifications
+from apps.listings.models import Listing, Property
+from apps.users.models import User
 
 from ..common.utils import firebase
-
+from .models import Appointment, Chat, Cooperation, Review, Wishlist
+from .serializers import ReviewSerializer
 
 # ==============================================================================
 # APPOINTMENT SERVICES (DỊCH VỤ LỊCH HẸN)
 # ==============================================================================
 # Các hàm xử lý logic nghiệp vụ liên quan đến việc tạo và quản lý Lịch hẹn.
 
-def create_appointment(
-    *, user: User, listing: Listing, appointment_date: datetime, note: str
-) -> Appointment:
+
+def create_appointment(*, user: User, listing: Listing, appointment_date: datetime, note: str) -> Appointment:
     """Tạo một lịch hẹn mới và thông báo cho chủ tin đăng."""
     if appointment_date < timezone.now():
         raise BusinessLogicError("Không thể đặt lịch hẹn trong quá khứ.")
@@ -45,9 +41,7 @@ def create_appointment(
     return appointment
 
 
-def update_appointment_status(
-*, appointment: Appointment, new_status: str, actor: User
-) -> Appointment:
+def update_appointment_status(*, appointment: Appointment, new_status: str, actor: User) -> Appointment:
     """
     Cập nhật trạng thái của một lịch hẹn.
     Hàm này kiểm tra quyền của người thực hiện hành động.
@@ -97,14 +91,15 @@ def update_appointment_status(
 
     return appointment
 
+
 # ==============================================================================
 # REVIEW & WISHLIST SERVICES (DỊCH VỤ ĐÁNH GIÁ & YÊU THÍCH)
 # ==============================================================================
 # Các hàm xử lý logic nghiệp vụ cho việc Đánh giá và thêm vào Danh sách yêu thích.
 
+
 def rate_property_and_update_score(
-    *, user: User, prop: Property, serializer: ReviewSerializer,
-    user_latitude: float, user_longitude: float
+    *, user: User, prop: Property, serializer: ReviewSerializer, user_latitude: float, user_longitude: float
 ) -> Review:
     """Tạo một đánh giá và cập nhật điểm trung bình, sau khi đã xác minh vị trí."""
     # 1. Kiểm tra xem bất động sản có tọa độ không
@@ -120,7 +115,7 @@ def rate_property_and_update_score(
     property_location = prop.location.point
 
     # 4. Tính khoảng cách
-    distance_in_meters = property_location.distance(user_location) * 100000 # Chuyển đổi từ độ sang mét (ước lượng)
+    distance_in_meters = property_location.distance(user_location) * 100000  # Chuyển đổi từ độ sang mét (ước lượng)
 
     VERIFICATION_RADIUS_METERS = 5000
 
@@ -147,11 +142,9 @@ def rate_property_and_update_score(
 
         return review
 
+
 def toggle_wishlist_item(*, user: User, listing: Listing) -> Tuple[str, Wishlist | None]:
-    wishlist_item, created = Wishlist.objects.get_or_create(
-        user=user,
-        listing=listing
-    )
+    wishlist_item, created = Wishlist.objects.get_or_create(user=user, listing=listing)
 
     if created:
         return "added", wishlist_item
@@ -159,10 +152,12 @@ def toggle_wishlist_item(*, user: User, listing: Listing) -> Tuple[str, Wishlist
         wishlist_item.delete()
         return "removed", None
 
+
 # ==============================================================================
 # CHAT SERVICES (DỊCH VỤ TRÒ CHUYỆN)
 # ==============================================================================
 # Các hàm xử lý việc tạo và truy vấn các Cuộc trò chuyện.
+
 
 def get_or_create_private_chat(*, user1: User, user2: User, listing: Listing = None) -> tuple[Chat, bool]:
     """
@@ -171,14 +166,10 @@ def get_or_create_private_chat(*, user1: User, user2: User, listing: Listing = N
     """
     # Tìm một chat có type=PRIVATE, có đúng 2 người tham gia,
     # và 2 người đó chính là user1 và user2.
-    chat_qs = Chat.objects.annotate(
-        num_participants=Count('participants')
-    ).filter(
-        chat_type=Chat.ChatType.PRIVATE,
-        num_participants=2,
-        participants=user1
-    ).filter(
-        participants=user2
+    chat_qs = (
+        Chat.objects.annotate(num_participants=Count("participants"))
+        .filter(chat_type=Chat.ChatType.PRIVATE, num_participants=2, participants=user1)
+        .filter(participants=user2)
     )
 
     # Lọc thêm theo listing nếu có
@@ -192,10 +183,7 @@ def get_or_create_private_chat(*, user1: User, user2: User, listing: Listing = N
 
     # Nếu không, tạo chat mới trong một transaction
     with transaction.atomic():
-        new_chat = Chat.objects.create(
-            chat_type=Chat.ChatType.PRIVATE,
-            listing=listing
-        )
+        new_chat = Chat.objects.create(chat_type=Chat.ChatType.PRIVATE, listing=listing)
         new_chat.participants.add(user1, user2)
 
         transaction.on_commit(
@@ -203,47 +191,43 @@ def get_or_create_private_chat(*, user1: User, user2: User, listing: Listing = N
                 postgres_chat_id=new_chat.id,
                 user1=user1,
                 user2=user2,
-                listing_title=listing.title if listing else "cuộc trò chuyện"
+                listing_title=listing.title if listing else "cuộc trò chuyện",
             )
         )
         # ======================================
 
     return new_chat, True
 
+
 def create_group_chat(*, owner: User, participants: list[User], name: str, listing: Listing = None) -> Chat:
     """
     Tạo một cuộc trò chuyện NHÓM mới.
     """
-    chat = Chat.objects.create(
-        chat_type=Chat.ChatType.GROUP,
-        name=name,
-        listing=listing
-    )
+    chat = Chat.objects.create(chat_type=Chat.ChatType.GROUP, name=name, listing=listing)
 
     # Thêm người tạo và tất cả những người tham gia khác vào phòng
     all_participants = [owner] + participants
     chat.participants.set(all_participants)
     return chat
 
+
 # Hàm để lấy tất cả chat của một người dùng (cả riêng và nhóm)
 def get_all_chats_for_user(user: User):
-    return user.chats.all().order_by('-last_message_timestamp')
+    return user.chats.all().order_by("-last_message_timestamp")
 
-#========================================================
+
+# ========================================================
 class CooperationActionError(BusinessLogicError):
     pass
 
+
 def respond_to_cooperation_request(
-    *,
-    cooperation: Cooperation,
-    actor: User,
-    action: str,
-    reason: str = None
+    *, cooperation: Cooperation, actor: User, action: str, reason: str = None
 ) -> Cooperation:
     """
     Xử lý hành động chấp nhận hoặc từ chối một yêu cầu hợp tác.
     """
-        # 1. Kiểm tra quyền: Chỉ chủ tin đăng (owner) mới được phản hồi
+    # 1. Kiểm tra quyền: Chỉ chủ tin đăng (owner) mới được phản hồi
     with transaction.atomic():
         if cooperation.owner != actor:
             raise CooperationActionError("Bạn không có quyền phản hồi yêu cầu này.")
@@ -253,10 +237,10 @@ def respond_to_cooperation_request(
             raise CooperationActionError("Yêu cầu này đã được xử lý trước đó.")
 
         # 3. Cập nhật trạng thái dựa trên hành động
-        if action == 'accept':
+        if action == "accept":
             cooperation.status = Cooperation.Status.ACCEPTED
-            cooperation.rejection_reason = None # Xóa lý do từ chối cũ nếu có
-        elif action == 'reject':
+            cooperation.rejection_reason = None  # Xóa lý do từ chối cũ nếu có
+        elif action == "reject":
             cooperation.status = Cooperation.Status.REJECTED
             cooperation.rejection_reason = reason
         else:
@@ -269,12 +253,14 @@ def respond_to_cooperation_request(
         related_item = {"type": "cooperation", "id": cooperation.id}
 
         # Task chỉ được đưa vào hàng đợi SAU KHI cooperation.save() thành công
-        transaction.on_commit(lambda: notifications.send_notification_to_user.delay(
-            user_id=cooperation.agent.id,
-            category="cooperation_update",
-            title=title,
-            content=content,
-            related_item=related_item
-        ))
+        transaction.on_commit(
+            lambda: notifications.send_notification_to_user.delay(
+                user_id=cooperation.agent.id,
+                category="cooperation_update",
+                title=title,
+                content=content,
+                related_item=related_item,
+            )
+        )
 
     return cooperation

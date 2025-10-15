@@ -2,6 +2,7 @@
 import pytest
 from landifys.serializers.moderation import ProtestSerializer
 
+
 @pytest.mark.django_db
 class TestProtestSerializer:
     """
@@ -22,7 +23,7 @@ class TestProtestSerializer:
             listing=listing,
             admin=admin,
             status="RESOLVED",
-            resolution_note="Đã xem xét và duyệt lại."
+            resolution_note="Đã xem xét và duyệt lại.",
         )
 
         # ACT
@@ -31,14 +32,21 @@ class TestProtestSerializer:
 
         # ASSERT
         expected_keys = {
-            "id", "listing_title", "protester", "reason", "admin",
-            "resolution_note", "status", "created_date", "updated_date"
+            "id",
+            "listing_title",
+            "protester",
+            "reason",
+            "admin",
+            "resolution_note",
+            "status",
+            "created_date",
+            "updated_date",
         }
         # Lưu ý: 'listing' là write_only nên không có trong output
         assert set(data.keys()) == expected_keys
-        assert data['listing_title'] == "Tin đăng bị gỡ"
-        assert data['protester']['username'] == "protester_user"
-        assert data['admin']['username'] == "admin_user"
+        assert data["listing_title"] == "Tin đăng bị gỡ"
+        assert data["protester"]["username"] == "protester_user"
+        assert data["admin"]["username"] == "admin_user"
 
     def test_deserialization_with_valid_data(self, listing_factory):
         """
@@ -47,17 +55,14 @@ class TestProtestSerializer:
         """
         # ARRANGE
         listing = listing_factory()
-        valid_data = {
-            "listing": listing.id,
-            "reason": "Tôi tin rằng tin đăng của tôi không vi phạm."
-        }
+        valid_data = {"listing": listing.id, "reason": "Tôi tin rằng tin đăng của tôi không vi phạm."}
 
         # ACT
         serializer = ProtestSerializer(data=valid_data)
 
         # ASSERT
         assert serializer.is_valid(raise_exception=True) is True
-        assert serializer.validated_data['listing'] == listing
+        assert serializer.validated_data["listing"] == listing
 
     def test_deserialization_fails_without_required_fields(self):
         """
@@ -65,7 +70,7 @@ class TestProtestSerializer:
         Kiểm tra serializer báo lỗi khi thiếu các trường bắt buộc.
         """
         # ARRANGE
-        invalid_data = {} # Thiếu cả 'listing' và 'reason'
+        invalid_data = {}  # Thiếu cả 'listing' và 'reason'
 
         # ACT
         serializer = ProtestSerializer(data=invalid_data)

@@ -1,9 +1,10 @@
 from django.conf import settings
-from django.http import Http404 # <-- THÊM IMPORT NÀY
+from django.http import Http404  # <-- THÊM IMPORT NÀY
 from hashids import Hashids
 
 # Khởi tạo đối tượng hashids một lần duy nhất và có thể tái sử dụng ở mọi nơi
 hashids = Hashids(salt=settings.SECRET_KEY, min_length=8)
+
 
 def decode_public_id(public_id_str: str) -> int | None:
     """

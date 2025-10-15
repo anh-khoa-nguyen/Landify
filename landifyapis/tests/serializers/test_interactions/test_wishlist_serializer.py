@@ -44,7 +44,7 @@ class TestWishlistSerializer:
 
         # ASSERT
         assert serializer.is_valid(raise_exception=True) is True
-        assert serializer.validated_data['listing'] == listing
+        assert serializer.validated_data["listing"] == listing
 
     def test_deserialization_with_non_existent_listing_id(self):
         """

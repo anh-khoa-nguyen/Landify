@@ -1,12 +1,14 @@
 # D:\Backend\Landify\landifyapis\apps\users\tasks\notifications.py
 
-from celery import shared_task
 import logging
+
+from celery import shared_task
+
+from apps.common.utils import firebase
+from apps.listings.models import Listing
 
 # <<< THAY ĐỔI IMPORT: Dùng đường dẫn tuyệt đối từ gốc project >>>
 from apps.users.models import User
-from apps.listings.models import Listing
-from apps.common.utils import firebase
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ def notify_followers_of_new_listing(owner_id: int, listing_id: int):
         owner = User.objects.get(pk=owner_id)
         listing = Listing.objects.get(pk=listing_id)
 
-        subscriptions = owner.follower_set.select_related('follower').all()
+        subscriptions = owner.follower_set.select_related("follower").all()
 
         if not subscriptions.exists():
             logger.info(f"User ID {owner_id} không có người theo dõi nào. Kết thúc tác vụ.")
@@ -29,16 +31,14 @@ def notify_followers_of_new_listing(owner_id: int, listing_id: int):
 
         owner_name = owner.get_full_name() or owner.username
         title = f"{owner_name} vừa đăng tin mới"
-        content = f"Hãy xem ngay tin đăng bất động sản mới: \"{listing.title}\""
+        content = f'Hãy xem ngay tin đăng bất động sản mới: "{listing.title}"'
 
         # Tạo public_id từ listing.id
         from apps.common.utils.hashids import hashids
+
         public_id = hashids.encode(listing.id)
 
-        related_item = {
-            "type": "listing",
-            "public_id": public_id
-        }
+        related_item = {"type": "listing", "public_id": public_id}
 
         followers_notified_count = 0
         for sub in subscriptions:
@@ -48,7 +48,7 @@ def notify_followers_of_new_listing(owner_id: int, listing_id: int):
                 category="new_listing_from_followed_user",
                 title=title,
                 content=content,
-                related_item=related_item
+                related_item=related_item,
             )
             followers_notified_count += 1
 
