@@ -50,7 +50,6 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     """ViewSet cho việc quản lý lịch hẹn."""
 
     serializer_class = AppointmentSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -59,9 +58,14 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         return Appointment.objects.filter(Q(user=user) | Q(listing__user=user)).distinct()
 
     def get_permissions(self):
-        if self.action == "create":
-            return [perms.IsIdentityVerified()]
-        return [perms.IsOwnerOrAdmin()]
+        if self.action == 'create':
+            self.permission_classes = [perms.IsIdentityVerified]
+        elif self.action == 'update_status':
+            self.permission_classes = [permissions.IsAuthenticated]
+        else:
+            self.permission_classes = [permissions.IsAuthenticated]
+
+        return super().get_permissions()
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -75,6 +79,27 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         if not new_status:
             return Response({"error": "Trường 'status' là bắt buộc."}, status=status.HTTP_400_BAD_REQUEST)
 
+        actor = request.user
+        listing_owner = appointment.listing.user
+        requester = appointment.user
+
+        can_confirm_or_complete = (actor == listing_owner or actor.role == User.Role.ADMIN)
+        can_cancel = (actor == listing_owner or actor == requester or actor.role == User.Role.ADMIN)
+
+        is_allowed = False
+        if new_status in [Appointment.Status.CONFIRMED, Appointment.Status.COMPLETED]:
+            if can_confirm_or_complete:
+                is_allowed = True
+        elif new_status == Appointment.Status.CANCELLED:
+            if can_cancel:
+                is_allowed = True
+
+        if not is_allowed:
+            return Response(
+                {"detail": "Bạn không có quyền thực hiện hành động này trên lịch hẹn này."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         try:
             updated_appointment = interactions_services.update_appointment_status(
                 appointment=appointment, new_status=new_status, actor=request.user
@@ -84,7 +109,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except BusinessLogicError as e:
-            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @interactions_docs.wishlist_viewset_schema  # Giả định bạn sẽ tạo doc này
@@ -160,11 +185,7 @@ class CooperationViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        listing_id = serializer.validated_data.get("listing_id")
-        try:
-            listing = Listing.objects.select_related("user").get(id=listing_id)
-        except Listing.DoesNotExist:
-            raise serializers.ValidationError("Tin đăng không tồn tại.")
+        listing = serializer.validated_data.pop('listing_public_id')
 
         agent = self.request.user
         owner = listing.user
@@ -172,8 +193,7 @@ class CooperationViewSet(viewsets.ModelViewSet):
         if agent == owner:
             raise serializers.ValidationError("Bạn không thể tự gửi yêu cầu hợp tác cho chính mình.")
 
-        # Lưu yêu cầu với agent và owner đã được xác định
-        serializer.save(agent=agent, owner=owner)
+        serializer.save(listing=listing, agent=agent, owner=owner)
 
     @action(methods=["post"], detail=True, url_path="respond")
     def respond(self, request, pk=None):

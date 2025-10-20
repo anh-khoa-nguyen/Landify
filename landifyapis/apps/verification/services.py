@@ -9,7 +9,7 @@ from django.db import transaction
 
 from apps.common.func import fengshui
 from apps.common.services import BusinessLogicError, EkycError
-from apps.common.utils import ekyc, otp, sms
+from apps.common.utils import ekyc, otp, sms, firebase
 from apps.users.models import User, UserProfile
 
 
@@ -162,6 +162,60 @@ def generate_agora_token(*, channel_name: str, uid: int) -> Dict[str, Any]:
     except Exception as e:
         raise BusinessLogicError(f"Lỗi tạo token Agora: {e}")
 
+
+def initiate_call_session(*, caller: User, receiver_id: int, is_video_call: bool) -> Dict[str, Any]:
+    """
+    Điều phối toàn bộ quá trình khởi tạo một cuộc gọi:
+    1. Tạo channel name.
+    2. Lấy receiver object.
+    3. Tạo Agora token.
+    4. Tạo bản ghi trên Firestore.
+    5. Gửi Push Notification cho receiver.
+    6. Trả về thông tin cần thiết cho caller.
+    """
+    # 1. Tạo channel name duy nhất và có thể đoán được
+    # Sắp xếp ID để đảm bảo channel name là duy nhất cho một cặp user
+    user_ids = sorted([caller.id, receiver_id])
+    channel_name = f"call_{user_ids[0]}_{user_ids[1]}"
+
+    # 2. Lấy receiver object
+    try:
+        receiver = User.objects.get(pk=receiver_id)
+    except User.DoesNotExist:
+        raise BusinessLogicError("Người dùng bạn muốn gọi không tồn tại.")
+
+    # 3. Tạo Agora token cho người gọi (caller)
+    # UID của Agora phải là số nguyên dương không phải 0
+    caller_uid = caller.id
+    token_data = generate_agora_token(channel_name=channel_name, uid=caller_uid)
+
+    # 4. Tạo bản ghi trên Firestore
+    firebase.create_firestore_call_session(
+        channel_name=channel_name,
+        token=token_data['token'],  # Token này cho người nhận sử dụng
+        caller=caller,
+        receiver=receiver,
+        is_video_call=is_video_call
+    )
+
+    # 5. Gửi Push Notification cho người nhận
+    firebase.send_fcm_notification(
+        user_id=receiver.id,
+        title="Cuộc gọi đến",
+        body=f"Bạn có cuộc gọi từ {caller.get_full_name() or caller.username}",
+        data={
+            'type': 'incoming_call',
+            'channelName': channel_name,
+            # Các thông tin khác bạn muốn gửi kèm
+        }
+    )
+
+    # 6. Trả về thông tin cho người gọi để bắt đầu tham gia kênh
+    return {
+        "channelName": channel_name,
+        "token": token_data['token'],
+        "uid": caller_uid,
+    }
 
 def get_feng_shui_analysis(*, property_direction_name: str, date_of_birth: date) -> Dict[str, Any]:
     """Thực hiện phân tích phong thủy dựa trên hướng nhà và ngày sinh."""

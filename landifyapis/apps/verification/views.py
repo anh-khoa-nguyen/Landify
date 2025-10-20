@@ -13,6 +13,7 @@ from apps.interactions import services as interactions_services
 from apps.interactions.serializers import ReviewSerializer
 from apps.properties.models import Property
 from apps.verification import services as verification_services
+from apps.users.models import User
 
 from . import services as verification_services
 
@@ -141,5 +142,30 @@ class AgoraTokenViewSet(viewsets.ViewSet):
             token_data = verification_services.generate_agora_token(channel_name=channel_name, uid=uid)
             # Token_data trả về từ service đã có dạng {"token": "...", "uid": ...}
             return Response(token_data, status=status.HTTP_200_OK)
+        except BusinessLogicError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class CallViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(methods=["post"], detail=False, url_path="initiate")
+    def initiate_call(self, request):
+        """
+        Khởi tạo một phiên gọi điện.
+        Nhận vào receiver_id và is_video_call.
+        """
+        try:
+            receiver_id = int(request.data.get("receiver_id"))
+            is_video_call = bool(request.data.get("is_video_call", False))
+        except (TypeError, ValueError):
+            return Response({"error": "receiver_id không hợp lệ."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            call_data = verification_services.initiate_call_session(
+                caller=request.user,
+                receiver_id=receiver_id,
+                is_video_call=is_video_call
+            )
+            return Response(call_data, status=status.HTTP_200_OK)
         except BusinessLogicError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

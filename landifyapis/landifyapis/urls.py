@@ -26,7 +26,7 @@ urlpatterns = [
     path("api/", include("apps.interactions.urls")),
     path("api/", include("apps.moderation.urls")),
     path("api/", include("apps.verification.urls")),
-    path("api/address/", include("vi_address.urls")),
+    #path("api/address/", include("vi_address.urls")),
     path("api/common/", include("apps.common.urls")),  # <-- THÊM DÒNG NÀY
     path("api/payment/", include("apps.payment.urls")),
     # URL cho giao diện Redoc

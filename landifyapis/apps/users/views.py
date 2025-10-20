@@ -56,6 +56,26 @@ class UserViewSet(viewsets.ModelViewSet):
     ViewSet để quản lý người dùng: đăng ký, xem thông tin, cập nhật, theo dõi.
     """
 
+    def destroy(self, request, *args, **kwargs):
+        target_user = self.get_object()
+        acting_user = request.user
+
+        if target_user == acting_user:
+            return Response(
+                {"error": "Bạn không thể tự xóa tài khoản của chính mình."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if target_user.is_superuser:
+            return Response(
+                {"error": "Không được phép xóa tài khoản Superuser."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        self.perform_destroy(target_user)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     queryset = (
         User.objects.filter(is_active=True)
         .select_related("profile")
@@ -90,6 +110,8 @@ class UserViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [perms.IsOwnerOrAdmin()]
+        if self.action in ["destroy"]:
+            return [perms.IsAdmin()]
         return [permissions.IsAuthenticated()]
 
     @accounts_docs.current_user_schema
@@ -180,10 +202,10 @@ class UserViewSet(viewsets.ModelViewSet):
 
         page = self.paginate_queryset(queryset)
         if page is not None:
-            serializer = self.get_serializer(page, many=True, context={'request': request})
+            serializer = ListingPreviewSerializer(page, many=True, context={'request': request})
             return self.get_paginated_response(serializer.data)
 
-        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        serializer = ListingPreviewSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
     @action(methods=["get"], detail=False, url_path="me/reports-received")
@@ -234,6 +256,24 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)
 
+    @action(methods=["get"], detail=False, url_path="me/cooperations-received")
+    def cooperations_received(self, request):
+        """
+        Trả về danh sách các yêu cầu hợp tác mà người dùng hiện tại đã NHẬN ĐƯỢC.
+        """
+        user = request.user
+        # Thay đổi logic filter: lọc theo trường 'owner' thay vì 'agent'
+        queryset = Cooperation.objects.filter(owner=user).order_by('-created_date')
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            # get_serializer() sẽ tự động trả về CooperationSerializer như đã định nghĩa
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
     @action(methods=["get"], detail=False, url_path="me/reviews")
     def my_reviews(self, request):
         """
@@ -251,4 +291,47 @@ class UserViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=True, url_path="listings", permission_classes=[permissions.AllowAny])
+    def listings(self, request, pk=None):
+        """
+        Trả về danh sách các tin đăng đang hoạt động của một người dùng cụ thể.
+        """
+        user = self.get_object()  # self.get_object() sẽ lấy user dựa trên 'pk' từ URL
+
+        # Lọc các tin đăng của user đó
+        queryset = Listing.objects.filter(user=user, active=True, status=Listing.Status.AVAILABLE).order_by(
+            '-created_date')
+
+        # Áp dụng phân trang
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            # Sử dụng ListingPreviewSerializer để trả về dữ liệu gọn nhẹ
+            serializer = ListingPreviewSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ListingPreviewSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=True, url_path="reviews-received", permission_classes=[permissions.AllowAny])
+    def reviews_received(self, request, pk=None):
+        """
+        Trả về danh sách các đánh giá mà các bất động sản của người dùng này đã nhận.
+        """
+        user = self.get_object()
+
+        # Truy vấn phức tạp: Lấy các Review mà 'property__owner' là user này
+        queryset = Review.objects.filter(property__owner=user, active=True).select_related(
+            'user__profile',  # Tối ưu để lấy thông tin người đánh giá
+            'property'
+        ).order_by('-created_date')
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            # Sử dụng ReviewSerializer để trả về dữ liệu chi tiết
+            serializer = ReviewSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = ReviewSerializer(queryset, many=True, context={'request': request})
         return Response(serializer.data)

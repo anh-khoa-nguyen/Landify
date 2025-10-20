@@ -170,60 +170,40 @@ def update_listing_features(*, listing: models.Listing, features_data: List[Dict
 
     incoming_feature_ids = {item.get("feature_id") for item in features_data if item.get("feature_id")}
     features_map = {
-        feature.id: feature for feature in models.PropertyFeature.objects.filter(id__in=incoming_feature_ids)
+        feature.id: feature for feature in property_models.PropertyFeature.objects.filter(id__in=incoming_feature_ids)
     }
 
     with transaction.atomic():
-        current_feature_ids = set(listing.feature_values.values_list("feature_id", flat=True))
-        features_to_delete = current_feature_ids - incoming_feature_ids
-        if features_to_delete:
-            models.ListingPropertyFeatureValue.objects.filter(
-                listing=listing, feature_id__in=features_to_delete
-            ).delete()
-
         for item in features_data:
             feature_id = item.get("feature_id")
             value = item.get("value")
 
+            # Bỏ qua nếu không có feature_id hoặc feature_id không hợp lệ
             if not feature_id or feature_id not in features_map:
+                logger.warning(f"Bỏ qua feature không hợp lệ hoặc thiếu ID: {item}")
                 continue
 
             feature = features_map[feature_id]
-            validated_value = None
 
-            if feature.feature_type == models.PropertyFeature.FeatureType.FLOAT:
+            # Logic validate giá trị (có thể mở rộng thêm)
+            validated_value = None
+            if feature.feature_type == property_models.PropertyFeature.FeatureType.FLOAT:
                 try:
                     validated_value = float(value)
                 except (ValueError, TypeError):
-                    # Ghi log cảnh báo về dữ liệu không hợp lệ và bỏ qua
-                    logger.warning("Giá trị '%s' không hợp lệ cho feature số thực '%s'. Bỏ qua.", value, feature.name)
+                    logger.warning(f"Giá trị '{value}' không hợp lệ cho feature số thực '{feature.name}'. Bỏ qua.")
                     continue
+            elif feature.feature_type == property_models.PropertyFeature.FeatureType.BOOLEAN:
+                validated_value = bool(value)
+            else: # TEXT, DIRECTION, etc.
+                validated_value = value
 
-            elif feature.feature_type == models.PropertyFeature.FeatureType.BOOLEAN:
-                # Chuyển đổi các giá trị 'true'/'false' hoặc 1/0 thành boolean
-                if isinstance(value, str) and value.lower() in ["true", "1"]:
-                    validated_value = True
-                elif isinstance(value, str) and value.lower() in ["false", "0"]:
-                    validated_value = False
-                else:
-                    validated_value = bool(value)
-
-            elif feature.feature_type == models.PropertyFeature.FeatureType.DIRECTION:
-                try:
-                    direction_id = int(value)
-                    validated_value = direction_id
-                except (ValueError, TypeError):
-                    print(
-                        f"Cảnh báo: Giá trị '{value}' không hợp lệ cho feature hướng. Phải là một ID số nguyên. Bỏ qua."
-                    )
-                    continue
-
-            else:
-                validated_value = str(value).strip()
-
+            # Sử dụng update_or_create để cập nhật nếu đã có, hoặc tạo mới nếu chưa có
             if validated_value is not None:
                 models.ListingPropertyFeatureValue.objects.update_or_create(
-                    listing=listing, feature=feature, defaults={"value": validated_value}
+                    listing=listing,
+                    feature=feature,
+                    defaults={"value": validated_value}
                 )
 
 

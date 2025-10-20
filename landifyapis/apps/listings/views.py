@@ -52,10 +52,9 @@ from .option_serializers import (
     VipTypeOptionSerializer,
 )
 from .serializers import (
-    ListingAISerializer,
     ListingCreateSerializer,
     ListingDetailSerializer,
-    ListingPreviewSerializer,
+    ListingPreviewSerializer, ChatbotContextSerializer,
 )
 
 # ==============================================================================
@@ -146,21 +145,32 @@ class ListingViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(response_serializer.data)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
-    @listings_docs.update_features_schema
-    @action(methods=["patch"], detail=True, url_path="update-features")
-    def update_features(self, request, public_id=None):
+    def partial_update(self, request, *args, **kwargs):
         listing = self.get_object()
 
-        features_data = request.data.get("features")
-        if features_data is None:
-            return Response({"error": "Trường 'features' là bắt buộc."}, status=status.HTTP_400_BAD_REQUEST)
+        # Tách dữ liệu 'features' ra khỏi request data nếu có
+        features_data = request.data.pop('features', None)
 
-        try:
-            listing_services.update_listing_features(listing=listing, features_data=features_data)
-            serializer = self.get_serializer(listing)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except BusinessLogicError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        # Gọi phương thức partial_update mặc định để xử lý các trường còn lại của Listing
+        # (như title, content, price_value...)
+        response = super().partial_update(request, *args, **kwargs)
+
+        # Nếu có dữ liệu features được gửi lên, gọi service để xử lý
+        if features_data is not None:
+            try:
+                # Gọi service đã được sửa lỗi ở trên
+                listing_services.update_listing_features(listing=listing, features_data=features_data)
+
+                # Tải lại dữ liệu sau khi cập nhật features để response trả về là mới nhất
+                listing.refresh_from_db()
+                serializer = self.get_serializer(listing)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            except BusinessLogicError as e:
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Nếu không có features_data, chỉ cần trả về response từ super()
+        return response
 
     @action(methods=["post"], detail=True, url_path="wishlist")
     def wishlist(self, request, public_id=None):
@@ -254,6 +264,22 @@ class ListingViewSet(viewsets.ModelViewSet):
 
         # Tạm thời trả về dữ liệu đã validate để test
         return Response(serializer.validated_data, status=status.HTTP_201_CREATED)
+
+    @action(methods=["get"], detail=True, url_path="chatbot-context", permission_classes=[permissions.IsAuthenticated])
+    def chatbot_context(self, request, public_id=None):
+        """
+        Cung cấp một đối tượng "entities" ban đầu về tin đăng và người dùng
+        cho Chatbot Service.
+        """
+        listing = self.get_object()
+        user = request.user
+
+        serializer = ChatbotContextSerializer(
+            instance=listing,
+            context={'user': user}  # Chỉ cần truyền user vào context
+        )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 # ==============================================================================

@@ -120,6 +120,7 @@ class PropertySerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     property_type_name = serializers.CharField(source="property_type.name", read_only=True)
     direction_name = serializers.CharField(source="direction.name", read_only=True, allow_null=True)
     legal_status_name = serializers.CharField(source="legal_status.name", read_only=True, allow_null=True)
+
     media = PropertyMediaSerializer(many=True, read_only=True)
 
     class Meta:
@@ -129,6 +130,9 @@ class PropertySerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "owner",
             "location",
             "area",
+            #"property_type",
+            #"direction",
+            #"legal_status",
             "property_type_name",
             "direction_name",
             "legal_status_name",
@@ -136,14 +140,25 @@ class PropertySerializer(DynamicFieldsMixin, serializers.ModelSerializer):
         ]
 
     extra_kwargs = {
-        "property_type": {"write_only": True, "required": True},
-        "direction": {"write_only": True, "required": False},
-        "legal_status": {"write_only": True, "required": False},
+        'property_type': {'write_only': True, 'required': True},
+        'direction': {'write_only': True, 'required': False, 'allow_null': True},
+        'legal_status': {'write_only': True, 'required': False, 'allow_null': True},
     }
 
     def create(self, validated_data):
         location_data = validated_data.pop("location")
+
+        # 1. Lấy và xóa 'latitude', 'longitude' khỏi dictionary
+        latitude = location_data.pop("latitude", None)
+        longitude = location_data.pop("longitude", None)
+
+        # 2. Nếu có cả hai, tạo đối tượng Point và thêm vào dictionary
+        if latitude is not None and longitude is not None:
+            location_data["point"] = Point(longitude, latitude, srid=4326)
+
+        # 3. Tạo Location object với dictionary đã được xử lý
         location = Location.objects.create(**location_data)
+
         owner = self.context["request"].user
         prop = Property.objects.create(owner=owner, location=location, **validated_data)
         return prop
@@ -151,6 +166,12 @@ class PropertySerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     def update(self, instance, validated_data):
         if "location" in validated_data:
             location_data = validated_data.pop("location")
+            # Tương tự, chúng ta cũng cần xử lý lat/lng cho update
+            latitude = location_data.pop("latitude", None)
+            longitude = location_data.pop("longitude", None)
+            if latitude is not None and longitude is not None:
+                location_data["point"] = Point(longitude, latitude, srid=4326)
+
             location_serializer = LocationSerializer(instance.location, data=location_data, partial=True)
             location_serializer.is_valid(raise_exception=True)
             location_serializer.save()

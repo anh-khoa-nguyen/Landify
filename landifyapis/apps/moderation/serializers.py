@@ -66,6 +66,13 @@ class ReportSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
 
         return data
 
+    def create(self, validated_data):
+        # Loại bỏ trường 'write_only' không thuộc về model trước khi tạo
+        validated_data.pop('reported_item_type_name', None)
+
+        # Gọi phương thức create mặc định của ModelSerializer với dữ liệu đã được làm sạch
+        return super().create(validated_data)
+
 
 class ProtestSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
     """Serializer cho model Protest (Kháng nghị)."""

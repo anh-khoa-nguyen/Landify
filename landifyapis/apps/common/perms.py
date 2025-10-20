@@ -29,7 +29,7 @@ class IsAdminOrReadOnly(permissions.BasePermission):
             return True
 
         # Quyền ghi chỉ dành cho admin
-        return request.user.is_authenticated and request.user.role == User.Role.ADMIN
+        return request.user.is_authenticated and request.user.is_superuser
 
 
 class IsOwnerOrAdmin(permissions.BasePermission):
@@ -42,7 +42,7 @@ class IsOwnerOrAdmin(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         # Admin luôn có quyền truy cập
-        if request.user.is_authenticated and request.user.role == User.Role.ADMIN:
+        if request.user.is_authenticated and request.user.is_superuser:
             return True
 
         owner_fields = ["user", "owner", "reporter", "protester", "follower"]

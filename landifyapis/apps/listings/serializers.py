@@ -14,6 +14,7 @@ from apps.common.utils.hashids import hashids
 from apps.properties.models import Direction, LegalStatus, Property, PropertyFeature, PropertyType
 from apps.properties.serializers import LocationSerializer, PropertyFeatureSerializer, PropertySerializer
 from apps.users.serializers import UserSerializer
+from bs4 import BeautifulSoup
 
 # from .models import BuySellDetail, ProjectDetail, RentalDetail
 from . import constants  # Import file constants của bạn
@@ -101,6 +102,8 @@ class ListingPreviewSerializer(serializers.ModelSerializer):
             "is_in_wishlist",
             "distance_km",
             "potential_score",
+            "active",
+            "spam_check_status",
         ]
 
     def get_public_id(self, obj: Listing) -> str:
@@ -399,16 +402,19 @@ class ListingCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, data):
+        is_creating = self.instance is None
+
         has_property_data = "property" in data
         has_property_id = "property_id" in data
 
-        if not has_property_data and not has_property_id:
-            raise serializers.ValidationError(
-                {"property_error": "Cần phải cung cấp 'property' (để tạo mới) hoặc 'property_id' (để liên kết)."}
-            )
+        if is_creating:
+            if not has_property_data and not has_property_id:
+                raise serializers.ValidationError(
+                    {"property_error": "Cần phải cung cấp 'property' (để tạo mới) hoặc 'property_id' (để liên kết)."}
+                )
 
-        if has_property_data and has_property_id:
-            raise serializers.ValidationError("Không thể cung cấp đồng thời cả 'property' và 'property_id'.")
+            if has_property_data and has_property_id:
+                raise serializers.ValidationError("Không thể cung cấp đồng thời cả 'property' và 'property_id'.")
 
         return data
 
@@ -478,68 +484,49 @@ class ListingCreateSerializer(serializers.ModelSerializer):
 
 
 # ===================AI===================
-class ListingAISerializer(ListingDetailSerializer):
+class ChatbotContextSerializer(serializers.Serializer):
     """
-    Serializer chuyên dụng để tạo ra một "tài liệu" văn bản hoàn chỉnh
-    về một tin đăng, phục vụ cho việc phân tích của AI (ví dụ: chatbot RAG).
+    Tổng hợp dữ liệu từ Listing và User để tạo ra một đối tượng "entities"
+    ban đầu cho Chatbot Service.
     """
+    nam_sinh_1 = serializers.SerializerMethodField()
+    gioi_tinh_1 = serializers.SerializerMethodField()
 
-    full_address_text = serializers.SerializerMethodField()
-    features_text = serializers.SerializerMethodField()
-    summary_text = serializers.SerializerMethodField()
+    nam_sinh_2 = serializers.SerializerMethodField()
+    gioi_tinh_2 = serializers.SerializerMethodField()
 
-    class Meta(ListingDetailSerializer.Meta):
-        fields = ListingDetailSerializer.Meta.fields + ["full_address_text", "features_text", "summary_text"]
+    huong_nha = serializers.CharField(source='property.direction.name', allow_null=True, read_only=True)
 
-    def get_full_address_text(self, obj: Listing) -> str:
-        if not obj.property or not obj.property.location:
-            return "Không có thông tin địa chỉ."
+    def get_nam_sinh_1(self, listing_instance):
+        user = self.context.get('user')
+        if user and hasattr(user, 'profile') and user.profile.date_of_birth:
+            return user.profile.date_of_birth.year
+        return None
 
-        loc = obj.property.location
-        parts = [
-            loc.street,
-            getattr(loc.ward, "name", None),
-            getattr(loc.district, "name", None),
-            getattr(loc.city, "name", None),
-        ]
-        return ", ".join(filter(None, parts))  # Lọc ra các giá trị None và nối chuỗi
+    def get_gioi_tinh_1(self, listing_instance):
+        user = self.context.get('user')
+        if user and hasattr(user, 'profile') and user.profile.gender:
+            gender_map = {'male': 'Nam', 'female': 'Nữ'}
+            return gender_map.get(user.profile.gender)
+        return None
 
-    def get_features_text(self, obj: Listing) -> str:
-        if not obj.feature_values.exists():
-            return "Không có thông tin về các đặc điểm chi tiết."
+    def get_nam_sinh_2(self, listing_instance):
+        # 'listing_instance.user' chính là chủ của tin đăng
+        owner = listing_instance.user
+        if owner and hasattr(owner, 'profile') and owner.profile.date_of_birth:
+            return owner.profile.date_of_birth.year
+        return None
 
-        feature_texts = []
-        for fv in obj.feature_values.all():
-            # Sử dụng property `display_value` mà chúng ta đã tạo trong model
-            feature_texts.append(f"{fv.feature.name}: {fv.display_value}")
+    def get_gioi_tinh_2(self, listing_instance):
+        owner = listing_instance.user
+        if owner and hasattr(owner, 'profile') and owner.profile.gender:
+            gender_map = {'male': 'Nam', 'female': 'Nữ'}
+            return gender_map.get(owner.profile.gender)
+        return None
 
-        return ", ".join(feature_texts)
-
-    def get_summary_text(self, obj: Listing) -> str:
-        """
-        Tạo ra một đoạn văn bản tóm tắt toàn diện, là đầu vào chính cho AI.
-        Đây là phần quan trọng nhất.
-        """
-        property_type = self.get_property_type_name(obj)
-        address = self.get_full_address_text(obj)
-        area = obj.property.area if obj.property else "Không rõ"
-        direction = obj.property.direction.name if obj.property and obj.property.direction else "Không rõ"
-        legal_status = (
-            obj.property.legal_status.name if obj.property and obj.property.legal_status else "Chưa xác định"
-        )
-        features = self.get_features_text(obj)
-
-        from bs4 import BeautifulSoup
-
-        soup = BeautifulSoup(obj.content, "html.parser")
-        content_text = soup.get_text(separator=" ", strip=True)
-
-        summary = (
-            f"Đây là một tin đăng về bất động sản loại '{property_type}' với tiêu đề '{obj.title}'.\n"
-            f"Vị trí: {address}.\n"
-            f"Thông tin giá: {obj.display_price}.\n"
-            f"Thông số cơ bản: Diện tích {area} m², Hướng chính: {direction}, Pháp lý: {legal_status}.\n"
-            f"Các đặc điểm chi tiết: {features}.\n"
-            f"Nội dung mô tả của người đăng: {content_text}"
-        )
-        return summary
+    def to_representation(self, instance):
+        # Hàm này được ghi đè để đảm bảo output cuối cùng có dạng {"entities": {...}}
+        data = super().to_representation(instance)
+        # Loại bỏ các key có giá trị null
+        cleaned_data = {key: value for key, value in data.items() if value is not None}
+        return {"entities": cleaned_data}

@@ -121,14 +121,14 @@ class CooperationSerializer(serializers.ModelSerializer):
     agent = UserSerializer(read_only=True, fields=["id", "get_full_name", "profile"])
     owner = UserSerializer(read_only=True, fields=["id", "get_full_name", "profile"])
 
-    listing_id = serializers.IntegerField(write_only=True)
+    listing_public_id = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = Cooperation
         fields = [
             "id",
             "listing",
-            "listing_id",
+            "listing_public_id",
             "agent",
             "owner",
             "status",
@@ -137,6 +137,21 @@ class CooperationSerializer(serializers.ModelSerializer):
             "created_date",
         ]
         read_only_fields = ["agent", "owner", "status", "rejection_reason", "cancellation_reason"]
+
+    def validate_listing_public_id(self, value):
+        """
+        Kiểm tra xem public_id có hợp lệ và tin đăng có tồn tại không.
+        """
+        listing_id = decode_public_id(value)
+        if listing_id is None:
+            raise serializers.ValidationError("ID tin đăng không hợp lệ.")
+
+        try:
+            # Trả về đối tượng Listing để có thể sử dụng ở bước sau
+            listing = Listing.objects.select_related("user").get(pk=listing_id)
+            return listing
+        except Listing.DoesNotExist:
+            raise serializers.ValidationError("Tin đăng không tồn tại.")
 
 
 # ==============================================================================
