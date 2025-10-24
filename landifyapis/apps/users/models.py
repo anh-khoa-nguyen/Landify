@@ -64,6 +64,10 @@ class UserProfile(BaseModel):
     rating_score = models.FloatField(default=0.0, verbose_name="Điểm đánh giá trung bình")
     rating_count = models.PositiveIntegerField(default=0, verbose_name="Tổng số lượt đánh giá")
     listing_count = models.PositiveIntegerField(default=0, verbose_name="Tổng số tin đăng hoạt động")
+    listings_sold = models.PositiveIntegerField(default=0, verbose_name="Số lượng tin đã bán")
+    response_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="Tỷ lệ phản hồi (%)"
+    )
 
     # --- Thông tin chứng chỉ (nếu có) ---
     has_certificate = models.BooleanField(default=False, verbose_name="Có chứng chỉ môi giới")

@@ -3,6 +3,7 @@ from rest_framework import authentication, exceptions
 from apps.users.models import User
 from apps.common.utils import firebase
 from firebase_admin import auth
+from django.utils import timezone
 
 import logging
 logger = logging.getLogger(__name__)
@@ -56,6 +57,11 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
                     "role": User.Role.USER,
                 },
             )
+
+            # Cập nhật last_login cho người dùng mỗi khi họ được xác thực thành công.
+            # Đây được coi là một "phiên đăng nhập" mới với Firebase Authentication.
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
 
             # Tạo UserProfile nếu user mới được tạo
             if created:

@@ -38,6 +38,7 @@ class UserSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
             "is_id_card_verified",
             "is_identity_verified",
             "date_joined",
+            "last_login",
             "profile",
         ]
 
@@ -109,6 +110,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'rating_score',
             'rating_count',
             'listing_count',
+            'listings_sold',
+            'response_rate',
         ]
 
     def to_representation(self, instance):
@@ -133,6 +136,7 @@ class UserProfileDetailSerializer(DynamicFieldsMixin, serializers.ModelSerialize
             "id",
             "get_full_name",
             "date_joined",
+            "last_login",
             "profile",
             "follower_count",
             "following_count",

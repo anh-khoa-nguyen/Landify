@@ -51,7 +51,7 @@ class UserViewSet(viewsets.ModelViewSet):
     )
 
     def get_serializer_class(self):
-        if self.action == ['current_user', 'retrieve']:
+        if self.action in ['current_user', 'retrieve']:
             return UserProfileDetailSerializer
         if self.action == "create":
             return UserCreateSerializer
