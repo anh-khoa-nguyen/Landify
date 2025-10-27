@@ -1,0 +1,23 @@
+[
+  {
+    "code": "APARTMENT",
+    "name": "Căn hộ/Chung cư",
+    "icon_code": "building"
+  },
+  {
+    "code": "TOWNHOUSE",
+    "name": "Nhà ở",
+    "icon_code": "house"
+  },
+  {
+    "code": "LAND",
+    "name": "Đất",
+    "icon_code": "mountainSun"
+  },
+  {
+    "code": "OFFICE",
+    "name": "Văn phòng, MBKD",
+    "icon_code": "store"
+  }
+]
+

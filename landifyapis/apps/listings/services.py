@@ -79,6 +79,7 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
     features_data = validated_data.pop("features", None)
     vip_package_data = validated_data.pop("vip_package", None)
     promotion_code = validated_data.pop("promotion_code", None)
+    video_url = validated_data.pop("video_url", None)
 
     with transaction.atomic():
         property_obj = None
@@ -152,6 +153,14 @@ def create_full_listing(*, user: property_models.User, validated_data: dict) -> 
 
             if feature_values_to_create:
                 listing_models.ListingPropertyFeatureValue.objects.bulk_create(feature_values_to_create)
+
+        # Xử lý video URL từ YouTube/TikTok
+        if video_url:
+            PropertyMedia.objects.create(
+                property=property_obj,
+                media_type=PropertyMedia.MediaType.EXTERNAL_VIDEO,
+                source_url=video_url
+            )
 
     moderation_tasks.check_listing_for_spam.delay(listing.id)
 

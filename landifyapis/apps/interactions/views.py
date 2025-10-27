@@ -317,3 +317,36 @@ class SendAppointmentRequestView(APIView):
         async_to_sync(channel_layer.group_send)(f"chat_{chat_pk}", {"type": "chat_message", "message": message_data})
 
         return Response(message_data, status=status.HTTP_201_CREATED)
+
+
+class StartChatWithUserView(APIView):
+    """
+    Tạo hoặc lấy một cuộc trò chuyện riêng tư chỉ dựa vào ID của người nhận.
+    Khác với StartChatView (yêu cầu public_id của listing), view này chỉ cần receiver_id.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, format=None):
+        receiver_id = request.data.get("receiver_id")
+        if not receiver_id:
+            return Response({"error": "receiver_id là bắt buộc."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            receiver = User.objects.get(pk=receiver_id)
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response({"error": "Người nhận không hợp lệ."}, status=status.HTTP_404_NOT_FOUND)
+
+        sender = request.user
+
+        if sender == receiver:
+            return Response({"error": "Bạn không thể tự chat với chính mình."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Gọi service đã có sẵn, truyền listing=None
+        chat_obj, created = get_or_create_private_chat(user1=sender, user2=receiver, listing=None)
+
+        return Response(
+            {
+                "chat_id": chat_obj.id,
+            },
+            status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED,
+        )

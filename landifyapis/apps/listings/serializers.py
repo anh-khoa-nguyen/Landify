@@ -383,6 +383,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
     features = FeatureInputSerializer(many=True, required=False, write_only=True)
     vip_package = VipPackageCreateSerializer(required=False, write_only=True)
     promotion_code = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    video_url = serializers.URLField(required=False, write_only=True, allow_blank=True)
 
     class Meta:
         model = Listing
@@ -399,6 +400,7 @@ class ListingCreateSerializer(serializers.ModelSerializer):
             "features",
             "vip_package",
             "promotion_code",
+            "video_url",  # Thêm video_url
         ]
 
     def validate(self, data):

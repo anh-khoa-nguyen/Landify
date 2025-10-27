@@ -1,0 +1,19 @@
+[
+  {
+    "key": "listingType",
+    "label": "Loại tin"
+  },
+  {
+    "key": "propertyType",
+    "label": "Loại BĐS"
+  },
+  {
+    "key": "price",
+    "label": "Mức giá"
+  },
+  {
+    "key": "area",
+    "label": "Diện tích"
+  }
+]
+

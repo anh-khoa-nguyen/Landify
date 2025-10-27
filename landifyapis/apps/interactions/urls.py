@@ -16,9 +16,8 @@ chats_router = routers.NestedDefaultRouter(router, r"chats", lookup="chat")
 chats_router.register(r"messages", views.MessageViewSet, basename="chat-messages")
 
 urlpatterns = [
-    # === THÊM URL MỚI NÀY VÀO ===
     path("chats/start/", views.StartChatView.as_view(), name="start-chat"),
-    # path('chats/<str:id>/', views.ChatDetailView.as_view(), name='chat-detail'),
+    path("chats/start-with-user/", views.StartChatWithUserView.as_view(), name="start-chat-with-user"),
     path(
         "chats/<int:chat_pk>/send_appointment_request/",
         views.SendAppointmentRequestView.as_view(),

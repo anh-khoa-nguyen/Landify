@@ -140,6 +140,8 @@ class UserProfileDetailSerializer(DynamicFieldsMixin, serializers.ModelSerialize
         fields = [
             "id",
             "get_full_name",
+            "phone_number",
+            "last_login",
             "date_joined",
             "profile",
             "follower_count",

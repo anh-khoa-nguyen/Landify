@@ -19,6 +19,8 @@ CONFIG_DATA_DIR = Path(__file__).resolve().parent / "config_data"
 CONFIG_FILES = {
     "home_property_types": "home_property_types.json",
     "home_features": "home_features.json",
+    "search_property_types": "search_property_types.json",
+    "search_quick_filters": "search_quick_filters.json",
 }
 SCOPES = ["https://www.googleapis.com/auth/firebase.remoteconfig"]
 

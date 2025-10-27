@@ -108,6 +108,8 @@ class UserViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]
         if self.action in ["retrieve", "list"]:
             return [permissions.AllowAny()]
+        if self.action in ["listings", "reviews_received", "followers", "following"]:
+            return [permissions.AllowAny()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [perms.IsOwnerOrAdmin()]
         if self.action in ["destroy"]:
@@ -334,4 +336,47 @@ class UserViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
 
         serializer = ReviewSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=True, url_path="followers", permission_classes=[permissions.AllowAny])
+    def followers(self, request, pk=None):
+        """
+        Trả về danh sách những người đang theo dõi user này.
+        """
+        user = self.get_object()
+        # Truy vấn ngược từ Subscription: lấy tất cả subscription mà 'following' là user hiện tại.
+        # Sau đó select_related 'follower' để lấy thông tin người theo dõi.
+        subscriptions = user.follower_set.select_related("follower__profile").order_by("-created_date")
+
+        page = self.paginate_queryset(subscriptions)
+        if page is not None:
+            # Chúng ta cần một serializer để chỉ lấy thông tin user từ subscription
+            # Cách đơn giản nhất là dùng một list comprehension hoặc một serializer tùy chỉnh.
+            # Ở đây tôi dùng cách thủ công để bạn dễ hình dung, bạn có thể tạo serializer riêng nếu muốn.
+            follower_users = [sub.follower for sub in page]
+            # Tái sử dụng UserSerializer để hiển thị thông tin người dùng
+            serializer = UserSerializer(follower_users, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        follower_users = [sub.follower for sub in subscriptions]
+        serializer = UserSerializer(follower_users, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    @action(methods=["get"], detail=True, url_path="following", permission_classes=[permissions.AllowAny])
+    def following(self, request, pk=None):
+        """
+        Trả về danh sách những người mà user này đang theo dõi.
+        """
+        user = self.get_object()
+        # Truy vấn ngược từ Subscription: lấy tất cả subscription mà 'follower' là user hiện tại.
+        subscriptions = user.following_set.select_related("following__profile").order_by("-created_date")
+
+        page = self.paginate_queryset(subscriptions)
+        if page is not None:
+            following_users = [sub.following for sub in page]
+            serializer = UserSerializer(following_users, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        following_users = [sub.following for sub in subscriptions]
+        serializer = UserSerializer(following_users, many=True, context={'request': request})
         return Response(serializer.data)

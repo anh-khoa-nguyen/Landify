@@ -101,8 +101,8 @@ class PropertyMediaSerializer(DynamicFieldsMixin, serializers.ModelSerializer):
 
     class Meta:
         model = PropertyMedia
-        fields = ["id", "url", "public_id", "property", "file", "files"]
-        read_only_fields = ["id", "url", "public_id", "property"]
+        fields = ["id", "url", "public_id", "property", "file", "files", "media_type", "source_url"]
+        read_only_fields = ["id", "url", "public_id", "property", "media_type", "source_url"]
 
 
 # ==============================================================================

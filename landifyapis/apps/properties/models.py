@@ -178,9 +178,25 @@ class PropertyMedia(BaseModel):
     Lưu trữ ảnh/video cho bất động sản
     """
 
+    class MediaType(models.TextChoices):
+        IMAGE = "IMAGE", "Hình ảnh"
+        VIDEO = "VIDEO", "Video (Tải lên)"
+        EXTERNAL_VIDEO = "EXTERNAL_VIDEO", "Video (Liên kết ngoài)"
+
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="media", verbose_name="Bất động sản")
-    url = CloudinaryField("media", resource_type="auto")
-    public_id = models.CharField(max_length=255, editable=False, help_text="Public ID từ Cloudinary để xóa file")
+    # CloudinaryField giờ đây có thể là null, vì với link Youtube, chúng ta không upload file
+    url = CloudinaryField("media", resource_type="auto", null=True, blank=True)
+    public_id = models.CharField(
+        max_length=255, editable=False, null=True, blank=True, help_text="Public ID từ Cloudinary để xóa file"
+    )
+
+    # Thêm 2 trường mới để hỗ trợ video YouTube/TikTok
+    media_type = models.CharField(
+        max_length=20, choices=MediaType.choices, default=MediaType.IMAGE, verbose_name="Loại media"
+    )
+    source_url = models.URLField(
+        max_length=512, null=True, blank=True, verbose_name="URL gốc (Youtube, Tiktok, ...)"
+    )
 
     def __str__(self):
         return f"Media for Property {self.property.id}"
